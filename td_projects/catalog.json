@@ -1,0 +1,1124 @@
+[
+  {
+    "id": "01",
+    "slug": "gargantua-black-hole",
+    "title": "GARGANTUA // Relativistic Black Hole",
+    "category": "Astrophysics & Optics",
+    "category_ru": "Астрофизика и Оптика",
+    "price": 89,
+    "tech": [
+      "GLSL Geodesic Raymarching",
+      "Doppler Beaming",
+      "Bloom TOP",
+      "CHOP Lag Control"
+    ],
+    "desc_ru": "Релятивистская чёрная дыра с честным гравитационным линзированием Шварцшильда, эффектом Доплера на аккреционном диске, фотонным кольцом и полярными джетами.",
+    "script_filename": "project_01.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    float camElev = 0.32 + m.y * 0.95;\n    vec3 ro = vec3(0.0, camElev, -4.6);\n    ro.xz *= rot(m.x * 1.8 + t * 0.06);\n    vec3 ww = normalize(-ro);\n    vec3 up = normalize(vec3(0.18 + m.x * 0.25, 1.0, 0.0));\n    vec3 uu = normalize(cross(ww, up));\n    vec3 vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.45 * ww);\n\n    vec3 col = vec3(0.004, 0.007, 0.014);\n    vec3 p = ro, v = rd, accCol = vec3(0.0);\n    float dt = 0.045, bhRadius = 0.54, minR = 100.0;\n    bool swallowed = false;\n\n    for (int i = 0; i < 135; i++) {\n        float r2 = dot(p, p), r = sqrt(r2);\n        minR = min(minR, r);\n        if (r < bhRadius) { swallowed = true; break; }\n        float bend = 0.42 / (r2 * r + 0.008);\n        vec3 nextV = normalize(v - p * bend * dt);\n        vec3 nextP = p + nextV * dt * clamp(r * 0.65, 0.35, 1.8);\n\n        float diskDist = abs(p.y);\n        if (diskDist < 0.16 && r > 0.72 && r < 3.4) {\n            float angle = atan(p.z, p.x);\n            float radial = (r - 0.72) / (3.4 - 0.72);\n            float omega = 1.8 / pow(r, 1.25);\n            float clouds = fbm(vec2(r * 5.5, (angle + t * omega) * 3.0 + r * 4.0));\n            float fineRings = pow(sin(r * 38.0 - t * 2.5 + clouds * 3.0) * 0.5 + 0.5, 1.6);\n            float radialEnv = smoothstep(0.0, 0.08, radial) * pow(1.0 - radial, 1.6);\n            float vertEnv = exp(-diskDist * 32.0);\n            vec3 velDir = normalize(vec3(-p.z, 0.0, p.x));\n            float doppler = clamp(1.0 + 0.65 * dot(velDir, v), 0.25, 2.1);\n\n            vec3 diskCol = mix(vec3(1.0, 0.92, 0.78), vec3(1.0, 0.48, 0.12), smoothstep(0.0, 0.38, radial));\n            diskCol = mix(diskCol, vec3(0.55, 0.08, 0.02), smoothstep(0.35, 1.0, radial));\n            diskCol = mix(diskCol, vec3(0.35, 0.82, 1.0), clamp((doppler - 1.25) * 0.55, 0.0, 0.65));\n            float density = (0.35 + 0.95 * clouds) * (0.55 + 0.45 * fineRings) * radialEnv * vertEnv;\n            accCol += diskCol * density * pow(doppler, 2.2) * 0.11;\n        }\n        float axisDist = length(p.xz), absY = abs(p.y);\n        if (absY > 0.55 && absY < 3.8 && axisDist < 0.45) {\n            float jetWidth = 0.04 + absY * 0.085;\n            float jetMask = exp(-(axisDist * axisDist) / (jetWidth * jetWidth));\n            float jetNoise = fbm(vec2(absY * 3.5 - t * 4.5, atan(p.z, p.x) * 2.0));\n            float jetFade = smoothstep(0.55, 1.0, absY) * smoothstep(3.8, 1.2, absY);\n            accCol += vec3(0.22, 0.72, 1.0) * jetMask * jetNoise * jetFade * (0.018 + 0.008 * breath);\n        }\n        v = nextV; p = nextP;\n        if (r > 8.5 && i > 40) break;\n    }\n    if (!swallowed) {\n        vec2 starUV = v.xy / (abs(v.z) + 0.55) * 34.0;\n        vec2 starId = floor(starUV), starF = fract(starUV) - 0.5;\n        float starRnd = hash21(starId);\n        if (starRnd > 0.93) {\n            float starGlow = smoothstep(0.16, 0.0, length(starF)) * (0.65 + 0.35 * sin(t * 2.5 + starRnd * 50.0));\n            col += mix(vec3(0.5, 0.8, 1.0), vec3(1.0, 0.85, 0.65), fract(starRnd * 13.0)) * starGlow * 0.7;\n        }\n        accCol += vec3(1.0, 0.85, 0.6) * exp(-abs(minR - 0.545) * 55.0) * 0.95;\n    } else { col = vec3(0.0); }\n    col = aces((col + accCol) * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "02",
+    "slug": "vela-pulsar-magnetosphere",
+    "title": "VELA-X1 // Pulsar Magnetosphere",
+    "category": "Astrophysics & Optics",
+    "category_ru": "Астрофизика и Оптика",
+    "price": 79,
+    "tech": [
+      "3D Dipole Field Solver",
+      "Volumetric Beams",
+      "Feedback Trails",
+      "CHOP LFO"
+    ],
+    "desc_ru": "Миллисекундный нейтронный пульсар с вращающимися дипольными линиями магнитного поля и релятивистскими гамма-лучами.",
+    "script_filename": "project_02.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, m.y * 2.0, -4.2);\n    ro.xz *= rot(m.x * 2.0 + t * 0.25);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.003, 0.006, 0.016);\n    float tot = 0.0;\n    float tilt = 0.45 + 0.15 * sin(t * 0.5);\n    for (int i = 0; i < 80; i++) {\n        vec3 p = ro + rd * tot;\n        p.xz *= rot(t * 2.4);\n        p.xy *= rot(tilt);\n        float r = length(p);\n        // Neutron star core\n        float core = r - 0.26;\n        // Dipole magnetic field shells: r = L * sin^2(theta)\n        float sinTheta2 = dot(p.xz, p.xz) / (r * r + 1e-4);\n        float L = r / (sinTheta2 + 0.02);\n        float shell = abs(fract(L * 0.55 - t * 0.6) - 0.5) * 0.35;\n        float phiLines = abs(sin(atan(p.z, p.x) * 8.0)) * 0.08;\n        float dipoleDist = max(shell, phiLines) + max(0.0, r - 2.4);\n\n        // Polar radiation cone along Y axis\n        float cone = length(p.xz) - abs(p.y) * 0.22;\n        float beamGlow = exp(-max(cone, 0.0) * 14.0) * exp(-abs(p.y) * 0.45) * 0.065;\n        float fieldGlow = 0.0035 / (0.012 + dipoleDist * dipoleDist * 6.0) * smoothstep(2.6, 0.35, r);\n        float coreGlow = exp(-max(core, 0.0) * 24.0) * 0.09;\n\n        col += vec3(0.15, 0.75, 1.0) * fieldGlow;\n        col += vec3(0.65, 0.35, 1.0) * beamGlow * (1.1 + 0.3 * breath);\n        col += vec3(0.85, 0.95, 1.0) * coreGlow;\n        float stepD = min(max(core, 0.02), max(dipoleDist * 0.4, 0.03));\n        tot += stepD;\n        if (tot > 7.5) break;\n    }\n    col = aces(col * 1.25);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "03",
+    "slug": "supernova-shockwave-nebula",
+    "title": "SN-1054 // Supernova Filament Nebula",
+    "category": "Astrophysics & Optics",
+    "category_ru": "Астрофизика и Оптика",
+    "price": 75,
+    "tech": [
+      "3D Volumetric FBM",
+      "Ionization Shockfront",
+      "16-bit HDR TOP",
+      "ACES Tonemap"
+    ],
+    "desc_ru": "Объёмная туманность остатка сверхновой с ионизационным ударным фронтом и многослойными газовыми филаментами.",
+    "script_filename": "project_03.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.8);\n    ro.yz *= rot(m.y * 1.2);\n    ro.xz *= rot(m.x * 1.8 + t * 0.12);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.3 * ww);\n\n    vec3 col = vec3(0.004, 0.005, 0.012);\n    float tot = 1.2;\n    for (int i = 0; i < 68; i++) {\n        vec3 p = ro + rd * tot;\n        float r = length(p);\n        if (r < 2.4) {\n            vec3 q = p * 1.6;\n            q.xy += vec2(fbm(q.yz + t * 0.15), fbm(q.xz - t * 0.12)) * 0.65;\n            float n = fbm(q.xy * 1.8 + q.z);\n            float shell = exp(-pow((r - 1.25 - 0.12 * breath + n * 0.45) * 3.2, 2.0));\n            float filaments = smoothstep(0.42, 0.78, n) * shell;\n            vec3 gasCol = mix(vec3(1.0, 0.22, 0.45), vec3(0.12, 0.85, 1.0), smoothstep(0.9, 1.65, r));\n            gasCol = mix(gasCol, vec3(1.0, 0.78, 0.25), pow(n, 3.0));\n            col += gasCol * filaments * 0.085;\n            // Central white dwarf remnant\n            col += vec3(0.6, 0.85, 1.0) * exp(-r * 11.0) * 0.04;\n        }\n        tot += 0.065;\n        if (tot > 5.8) break;\n    }\n    col = aces(col * 1.3);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "04",
+    "slug": "ellis-wormhole-throat",
+    "title": "ELLIS-9 // Traversable Wormhole Metric",
+    "category": "Astrophysics & Optics",
+    "category_ru": "Астрофизика и Оптика",
+    "price": 95,
+    "tech": [
+      "Non-Euclidean Raytracing",
+      "Dual-Universe Skybox",
+      "Einstein Ring",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Кротовая нора Эллиса, соединяющая две разные галактики через сферическое горло неевклидова пространства-времени.",
+    "script_filename": "project_04.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, m.y * 1.2, -3.6);\n    ro.xz *= rot(m.x * 1.6 + t * 0.1);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.35 * ww);\n\n    float b0 = 0.78; // throat radius\n    vec3 p = ro, v = rd;\n    float side = 1.0;\n    vec3 glowAcc = vec3(0.0);\n    for (int i = 0; i < 110; i++) {\n        float r = length(p);\n        float dr = r - b0;\n        if (abs(dr) < 0.06) {\n            side = -side; // pass through wormhole throat to parallel universe!\n        }\n        float force = (b0 * b0) / (r * r * r + 0.04);\n        v = normalize(v - (p / (r + 1e-4)) * force * 0.042 * sign(dr));\n        p += v * 0.055;\n        float throatRing = exp(-abs(dr) * 16.0) * 0.015;\n        glowAcc += mix(vec3(0.15, 0.85, 1.0), vec3(1.0, 0.45, 0.15), 0.5 - 0.5 * side) * throatRing;\n        if (r > 6.5 && i > 30) break;\n    }\n    vec2 skyUV = v.xy / (abs(v.z) + 0.5) * 3.5;\n    float neb = fbm(skyUV * 1.8 + side * 4.0 + t * 0.08);\n    vec3 univA = mix(vec3(0.01, 0.02, 0.05), vec3(0.1, 0.65, 1.0), pow(neb, 2.2));\n    vec3 univB = mix(vec3(0.04, 0.01, 0.02), vec3(1.0, 0.38, 0.12), pow(neb, 1.8));\n    vec3 col = (side > 0.0 ? univA : univB) + glowAcc;\n    float stars = smoothstep(0.95, 1.0, hash21(floor(skyUV * 12.0)));\n    col += vec3(0.9, 0.95, 1.0) * stars * 0.6;\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "05",
+    "slug": "helios-solar-prominence",
+    "title": "HELIOS // Solar Corona & Magnetic Loops",
+    "category": "Astrophysics & Optics",
+    "category_ru": "Астрофизика и Оптика",
+    "price": 69,
+    "tech": [
+      "Convective Granulation FBM",
+      "Coronal Loop SDF",
+      "HDR Glow",
+      "Mouse Orbit"
+    ],
+    "desc_ru": "Кипящая конвективная фотосфера звезды с корональными магнитными арками плазмы и солнечным ветром.",
+    "script_filename": "project_05.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.4);\n    vec3 rd = normalize(vec3(uv, 1.35));\n    float b = dot(ro, rd), c = dot(ro, ro) - 1.15 * 1.15;\n    float h = b * b - c;\n    vec3 col = vec3(0.008, 0.003, 0.001);\n\n    // Volumetric corona & magnetic prominence arches around limb\n    float impact = length(cross(ro, rd));\n    float limbDist = max(impact - 1.12, 0.0);\n    float angle = atan(uv.y, uv.x) + m.x * 1.5;\n    float arch = sin(angle * 7.0 + t * 0.8) * sin(angle * 3.0 - t * 0.5);\n    float loopR = 1.15 + max(arch, 0.0) * (0.38 + 0.1 * breath);\n    float loopMask = exp(-abs(impact - loopR) * 26.0) * smoothstep(1.12, 1.2, impact);\n    float corona = exp(-limbDist * 4.8) * (0.45 + 0.55 * fbm(vec2(angle * 4.0, limbDist * 6.0 - t * 0.9)));\n    col += vec3(1.0, 0.35, 0.05) * corona * 0.85;\n    col += vec3(1.0, 0.75, 0.25) * loopMask * 1.2;\n\n    if (h > 0.0) {\n        float tHit = -b - sqrt(h);\n        vec3 pos = ro + rd * tHit;\n        vec3 nor = normalize(pos);\n        nor.xz *= rot(t * 0.12 + m.x);\n        nor.yz *= rot(m.y);\n        float gran = fbm(nor.xy * 8.0 + nor.z * 4.0 + t * 0.25);\n        float spots = smoothstep(0.28, 0.62, gran);\n        float limbDark = pow(clamp(dot(-rd, normalize(pos)), 0.0, 1.0), 0.42);\n        vec3 surf = mix(vec3(0.45, 0.06, 0.01), vec3(1.0, 0.45, 0.06), spots);\n        surf = mix(surf, vec3(1.0, 0.95, 0.65), pow(gran, 3.2));\n        col = surf * limbDark + vec3(1.0, 0.3, 0.04) * pow(1.0 - limbDark, 3.0) * 0.9;\n    }\n    col = aces(col * 1.1);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "06",
+    "slug": "lorenz-strange-attractor",
+    "title": "LORENZ-63 // Chaotic Strange Attractor",
+    "category": "Attractors & Topology",
+    "category_ru": "Аттракторы и Топология",
+    "price": 85,
+    "tech": [
+      "RK4 ODE Integrator",
+      "3D Phase-Space Projection",
+      "Feedback Glow",
+      "CHOP Control"
+    ],
+    "desc_ru": "Фазовый портрет странного аттрактора Лоренца с трассировкой 180 шагов дифференциального уравнения и неоновыми потоками.",
+    "script_filename": "project_06.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -48.0);\n    float angY = t * 0.28 + m.x * 2.2, angX = m.y * 1.4;\n    vec3 col = vec3(0.004, 0.007, 0.015);\n\n    // Integrate Lorenz ODE trajectories and project to screen\n    vec3 p = vec3(0.1, 0.0, 0.0);\n    float sigma = 10.0, rho = 28.0, beta = 8.0 / 3.0;\n    float dt = 0.0085;\n    for (int i = 0; i < 220; i++) {\n        vec3 dp = vec3(sigma * (p.y - p.x), p.x * (rho - p.z) - p.y, p.x * p.y - beta * p.z);\n        p += dp * dt;\n        vec3 q = p - vec3(0.0, 0.0, 25.0);\n        q.xz *= rot(angY);\n        q.yz *= rot(angX);\n        vec2 proj = q.xy / (1.0 + q.z * 0.018) * 0.022;\n        float d = length(uv - proj);\n        float phase = fract(float(i) / 220.0 - t * 0.35);\n        float spark = 0.25 + 0.75 * pow(phase, 3.0);\n        vec3 c = mix(vec3(0.1, 0.85, 1.0), vec3(1.0, 0.25, 0.65), float(i) / 220.0);\n        col += c * (0.00028 / (d * d + 0.00018)) * spark;\n    }\n    col = aces(col * 0.95);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "07",
+    "slug": "halvorsen-cyclic-attractor",
+    "title": "HALVORSEN // 3-Fold Symmetric Vortex",
+    "category": "Attractors & Topology",
+    "category_ru": "Аттракторы и Топология",
+    "price": 79,
+    "tech": [
+      "Cyclic ODE Solver",
+      "3-Fold Symmetry",
+      "HDR Ribbon Glow",
+      "Mouse Orbit"
+    ],
+    "desc_ru": "Циклически-симметричный странный аттрактор Халворсена с тремя переплетёнными вихревыми рукавами.",
+    "script_filename": "project_07.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    float angY = t * 0.25 + m.x * 2.0, angX = 0.5 + m.y * 1.2;\n    vec3 col = vec3(0.005, 0.005, 0.012);\n    vec3 p = vec3(-1.48, -1.51, 2.04);\n    float a = 1.89;\n    float dt = 0.0065;\n    for (int i = 0; i < 240; i++) {\n        vec3 dp = vec3(\n            -a * p.x - 4.0 * p.y - 4.0 * p.z - p.y * p.y,\n            -a * p.y - 4.0 * p.z - 4.0 * p.x - p.z * p.z,\n            -a * p.z - 4.0 * p.x - 4.0 * p.y - p.x * p.x\n        );\n        p = clamp(p + dp * dt, -12.0, 12.0);\n        vec3 q = p;\n        q.xz *= rot(angY);\n        q.yz *= rot(angX);\n        vec2 proj = q.xy * 0.052;\n        float d = length(uv - proj);\n        float pulse = 0.3 + 0.7 * fract(float(i) / 60.0 - t * 0.5);\n        vec3 c = mix(vec3(1.0, 0.55, 0.1), vec3(0.15, 0.9, 0.75), float(i) / 240.0);\n        col += c * (0.00024 / (d * d + 0.00016)) * pulse;\n    }\n    col = aces(col);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "08",
+    "slug": "hopf-fibration-4d",
+    "title": "HOPF-S3 // 4D Hypersphere Fibration",
+    "category": "Attractors & Topology",
+    "category_ru": "Аттракторы и Топология",
+    "price": 99,
+    "tech": [
+      "4D S3 -> R3 Stereographic",
+      "Villarceau Circles",
+      "Raymarched Tubes",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Стереографическая проекция расслоения Хопфа из 4-мерной гиперсферы S³ в наше 3D-пространство (зацепленные окружности Вилларсо).",
+    "script_filename": "project_08.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, m.y * 2.2, -4.2);\n    ro.xz *= rot(m.x * 1.8 + t * 0.2);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.35 * ww);\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        // Inverse stereographic projection R3 -> S3\n        float r2 = dot(p, p);\n        vec4 s3 = vec4(2.0 * p, r2 - 1.0) / (r2 + 1.0);\n        // 4D rotation in XW and YZ planes\n        s3.xw *= rot(t * 0.35);\n        s3.yz *= rot(t * 0.25);\n        // Hopf map S3 -> S2\n        vec2 z1 = s3.xy, z2 = s3.zw;\n        float hopfTheta = atan(length(z2), length(z1));\n        float hopfPhi1 = atan(z1.y, z1.x);\n        float hopfPhi2 = atan(z2.y, z2.x);\n\n        float ringGrid = abs(sin(hopfTheta * 6.0)) + abs(sin((hopfPhi1 - hopfPhi2) * 4.0));\n        float d = (ringGrid - 0.18) * (r2 + 1.0) * 0.12;\n        d = max(d, length(p) - 2.6);\n\n        float glow = 0.0022 / (0.015 + d * d * 28.0) * smoothstep(2.8, 0.5, length(p));\n        vec3 fiberCol = 0.5 + 0.5 * cos(hopfTheta * 4.0 + vec3(0.0, 2.1, 4.2) + t * 0.4);\n        col += fiberCol * glow;\n        tot += max(abs(d) * 0.65, 0.025);\n        if (tot > 7.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "09",
+    "slug": "calabi-yau-manifold",
+    "title": "CALABI-YAU // 6D String Manifold Slice",
+    "category": "Attractors & Topology",
+    "category_ru": "Аттракторы и Топология",
+    "price": 95,
+    "tech": [
+      "Quintic Hypersurface SDF",
+      "Iridescent Fresnel",
+      "Raymarched Normals",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Трёхмерный срез 6-мерного многообразия Калаби-Яу из теории суперструн с радужным интерференционным отражением.",
+    "script_filename": "project_09.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.5);\n    ro.yz *= rot(m.y * 1.4 + 0.3);\n    ro.xz *= rot(m.x * 1.8 + t * 0.22);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.005, 0.007, 0.015);\n    float tot = 0.0;\n    for (int i = 0; i < 80; i++) {\n        vec3 p = ro + rd * tot;\n        float r = length(p);\n        // Quintic trig slice approximation of Calabi-Yau manifold\n        vec3 q = p * 2.1;\n        float cy = (cos(q.x) * cos(q.y) + cos(q.y) * cos(q.z) + cos(q.z) * cos(q.x) - 0.25 * sin(t * 0.6)) * 0.28;\n        float d = max(abs(cy) - 0.035, r - 1.45);\n        if (d < 0.003) {\n            vec2 e = vec2(0.004, 0.0);\n            vec3 n = normalize(vec3(\n                cos((p.x+e.x)*2.1)*cos(q.y) - cos((p.x-e.x)*2.1)*cos(q.y),\n                cos((p.y+e.x)*2.1)*cos(q.z) - cos((p.y-e.x)*2.1)*cos(q.z),\n                cos((p.z+e.x)*2.1)*cos(q.x) - cos((p.z-e.x)*2.1)*cos(q.x)\n            ));\n            float fres = pow(1.0 - abs(dot(n, -rd)), 2.5);\n            vec3 irid = 0.5 + 0.5 * cos(dot(n, vec3(1,2,3)) * 2.5 + vec3(0.0, 2.0, 4.0) + t * 0.5);\n            float diff = max(dot(n, normalize(vec3(2,3,-2))), 0.0);\n            col = irid * (0.25 + 0.75 * diff) + vec3(0.3, 0.85, 1.0) * fres * 1.2;\n            break;\n        }\n        tot += max(d * 0.65, 0.015);\n        if (tot > 6.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "10",
+    "slug": "clifford-torus-knot",
+    "title": "TREFOIL-PQ // Braided Torus Knot Sculpture",
+    "category": "Attractors & Topology",
+    "category_ru": "Аттракторы и Топология",
+    "price": 69,
+    "tech": [
+      "Parametric (p,q) Knot SDF",
+      "PBR Specular Lighting",
+      "Orbit Trap Glow",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Скульптурный (3,5)-торический узел из жидкого хрома и неоновых нитей, вращающийся в 3D-пространстве.",
+    "script_filename": "project_10.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.6);\n    ro.yz *= rot(m.y * 1.4);\n    ro.xz *= rot(m.x * 1.8 + t * 0.25);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.005, 0.008, 0.016);\n    float tot = 0.0;\n    for (int i = 0; i < 75; i++) {\n        vec3 p = ro + rd * tot;\n        float rXZ = length(p.xz);\n        float phi = atan(p.z, p.x);\n        vec2 cp = vec2(rXZ - 1.05, p.y);\n        cp *= rot(phi * 2.5 + t * 0.4);\n        cp.y = abs(cp.y) - 0.28;\n        float d = length(cp) - 0.12;\n\n        float glow = 0.0018 / (0.015 + d * d * 32.0);\n        col += mix(vec3(0.1, 0.8, 1.0), vec3(1.0, 0.55, 0.15), 0.5 + 0.5 * sin(phi * 3.0 + t)) * glow;\n        if (d < 0.002) {\n            col += vec3(0.85, 0.92, 1.0) * 0.65;\n            break;\n        }\n        tot += max(d * 0.6, 0.015);\n        if (tot > 6.5) break;\n    }\n    col = aces(col * 1.1);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "11",
+    "slug": "turing-morphogenesis-coral",
+    "title": "TURING-RD // Morphogenesis Coral Relief",
+    "category": "Morphogenesis & Bio",
+    "category_ru": "Морфогенез и Био-Системы",
+    "price": 85,
+    "tech": [
+      "Multi-Scale Turing Pattern",
+      "3D Bump Normal Mapping",
+      "Subsurface Scattering",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Морфогенез Тьюринга: органические коралловые лабиринты реакции-диффузии с 3D-рельефом и подповерхностным свечением.",
+    "script_filename": "project_11.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 2.8;\n    p += m * 0.5;\n    // Domain-warped Turing morphogenesis ridges\n    vec2 q = vec2(fbm(p + t * 0.08), fbm(p + vec2(5.2, 1.3) - t * 0.07));\n    vec2 r = vec2(fbm(p + 3.2 * q + vec2(1.7, 9.2) + t * 0.06), fbm(p + 3.2 * q + vec2(8.3, 2.8)));\n    float h = sin(r.x * 18.0 + r.y * 12.0) * 0.5 + 0.5;\n    h = smoothstep(0.25, 0.75, h);\n\n    vec3 nor = normalize(vec3(dFdx(h) * 18.0, dFdy(h) * 18.0, 1.0));\n    vec3 lightDir = normalize(vec3(m.x * 1.5, m.y * 1.5, 1.2));\n    float diff = max(dot(nor, lightDir), 0.0);\n    float spec = pow(max(dot(reflect(-lightDir, nor), vec3(0,0,1)), 0.0), 32.0);\n\n    vec3 baseCol = mix(vec3(0.01, 0.03, 0.06), vec3(0.05, 0.72, 0.68), h);\n    baseCol = mix(baseCol, vec3(1.0, 0.45, 0.25), pow(r.x, 3.0) * h);\n    vec3 col = baseCol * (0.25 + 0.85 * diff) + vec3(0.6, 0.95, 1.0) * spec * 0.55;\n    col *= smoothstep(1.15, 0.2, length(uv));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "12",
+    "slug": "physarum-mycelium-network",
+    "title": "PHYSARUM // Bioluminescent Mycelium Web",
+    "category": "Morphogenesis & Bio",
+    "category_ru": "Морфогенез и Био-Системы",
+    "price": 79,
+    "tech": [
+      "Voronoi Filament Graph",
+      "Nutrient Flow Pulses",
+      "Bioluminescence",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Биолюминесцентная транспортная сеть слизевика Physarum polycephalum с бегущими импульсами питательных веществ.",
+    "script_filename": "project_12.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 3.5;\n    vec3 col = vec3(0.003, 0.008, 0.012);\n    for (int layer = 0; layer < 3; layer++) {\n        float sc = 1.0 + float(layer) * 0.85;\n        vec2 q = p * sc + vec2(float(layer) * 3.1, t * 0.06);\n        q += 0.35 * vec2(sin(q.y * 2.0 + t * 0.4), cos(q.x * 2.0 - t * 0.3));\n        vec2 id = floor(q), f = fract(q) - 0.5;\n        float minD1 = 10.0, minD2 = 10.0;\n        for (int y = -1; y <= 1; y++) {\n            for (int x = -1; x <= 1; x++) {\n                vec2 nb = vec2(float(x), float(y));\n                float rnd = hash21(id + nb);\n                vec2 pt = nb + 0.38 * sin(vec2(rnd * 6.28, rnd * 19.1) + t * 0.5) - f;\n                float d = length(pt);\n                if (d < minD1) { minD2 = minD1; minD1 = d; }\n                else if (d < minD2) { minD2 = d; }\n            }\n        }\n        float vein = minD2 - minD1;\n        float pulse = 0.55 + 0.45 * sin(length(uv - m * 0.4) * 14.0 - t * 3.5 + float(layer));\n        float glow = exp(-vein * 28.0 * sc) * pulse;\n        vec3 vCol = mix(vec3(0.05, 0.95, 0.65), vec3(0.15, 0.55, 1.0), float(layer) * 0.4);\n        col += vCol * glow * (0.7 / sc);\n        col += vec3(0.9, 1.0, 0.8) * exp(-minD1 * 18.0) * 0.15;\n    }\n    col *= smoothstep(1.1, 0.15, length(uv));\n    col = aces(col * 1.2);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "13",
+    "slug": "cellular-mitosis-metaballs",
+    "title": "MITOSIS // Subsurface Cellular Division",
+    "category": "Morphogenesis & Bio",
+    "category_ru": "Морфогенез и Био-Системы",
+    "price": 75,
+    "tech": [
+      "Smooth-Min SDF Metaballs",
+      "Microscope Darkfield Optics",
+      "Refraction",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Клеточный митоз под темнопольным электронным микроскопом: слияние и деление полупрозрачных мембран с ядрами.",
+    "script_filename": "project_13.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.5);\n    vec3 rd = normalize(vec3(uv, 1.4));\n    vec3 col = vec3(0.004, 0.01, 0.018);\n\n    float tot = 0.0;\n    for (int i = 0; i < 64; i++) {\n        vec3 p = ro + rd * tot;\n        float d = 10.0;\n        for (int k = 0; k < 7; k++) {\n            float fk = float(k);\n            vec3 center = 0.85 * vec3(\n                sin(t * 0.65 + fk * 1.7) + m.x * 0.4 * cos(fk),\n                cos(t * 0.52 + fk * 2.3) + m.y * 0.4 * sin(fk),\n                sin(t * 0.4 + fk * 3.1) * 0.5\n            );\n            float sphere = length(p - center) - (0.36 + 0.06 * sin(t + fk));\n            // Smooth min (smin)\n            float h = clamp(0.5 + 0.5 * (d - sphere) / 0.38, 0.0, 1.0);\n            d = mix(d, sphere, h) - 0.38 * h * (1.0 - h);\n        }\n        // Membrane shell + glowing nucleus\n        float membrane = abs(d) - 0.02;\n        float glow = 0.0022 / (0.012 + membrane * membrane * 45.0);\n        col += mix(vec3(0.1, 0.9, 0.75), vec3(0.35, 0.45, 1.0), smoothstep(-0.2, 0.2, p.y)) * glow;\n        tot += max(abs(d) * 0.55, 0.025);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.1);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "14",
+    "slug": "haeckel-radiolaria-silica",
+    "title": "RADIOLARIA // Haeckel Silica Exoskeleton",
+    "category": "Morphogenesis & Bio",
+    "category_ru": "Морфогенез и Био-Системы",
+    "price": 89,
+    "tech": [
+      "Icosahedral Symmetry Folding",
+      "Perforated Lattice SDF",
+      "Rim Lighting",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Кремниевый экзоскелет глубоководной радиолярии Эрнста Геккеля с икосаэдрической симметрией и биолюминесценцией.",
+    "script_filename": "project_14.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.4);\n    ro.yz *= rot(m.y * 1.5 + t * 0.15);\n    ro.xz *= rot(m.x * 1.8 + t * 0.22);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.004, 0.008, 0.016);\n    float tot = 0.0;\n    for (int i = 0; i < 75; i++) {\n        vec3 p = ro + rd * tot;\n        float r = length(p);\n        vec3 n = p / (r + 1e-4);\n        float holes = sin(n.x * 12.0) * sin(n.y * 12.0) * sin(n.z * 12.0);\n        float spikes = max(0.0, holes) * 0.22;\n        float shell1 = abs(r - 1.05 - spikes) - 0.035;\n        float pores = 0.18 - abs(holes);\n        float d = max(shell1, -pores);\n        float innerCore = r - 0.52;\n        d = min(d, max(abs(innerCore) - 0.025, -(0.15 - abs(sin(n.x*8.0)*sin(n.y*8.0)))));\n\n        float glow = 0.0014 / (0.015 + d * d * 42.0) * smoothstep(2.0, 0.4, r);\n        col += mix(vec3(0.15, 0.85, 0.95), vec3(1.0, 0.65, 0.25), smoothstep(0.6, 1.25, r)) * glow;\n        if (d < 0.002) {\n            col += vec3(0.75, 0.95, 1.0) * 0.5;\n            break;\n        }\n        tot += max(d * 0.6, 0.018);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "15",
+    "slug": "cortical-synapse-connectome",
+    "title": "CONNECTOME // 3D Neural Action Potentials",
+    "category": "Morphogenesis & Bio",
+    "category_ru": "Морфогенез и Био-Системы",
+    "price": 79,
+    "tech": [
+      "3D Gyroid Axon Lattice",
+      "Action Potential Pulses",
+      "Depth Fog",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Трёхмерная нейронная сеть коннектома с бегущими по аксонам электрическими потенциалами действия.",
+    "script_filename": "project_15.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(m.x * 1.2, m.y * 1.2, t * 0.45);\n    vec3 rd = normalize(vec3(uv, 1.25));\n    rd.xz *= rot(m.x * 0.5);\n    rd.yz *= rot(m.y * 0.4);\n\n    vec3 col = vec3(0.003, 0.005, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 70; i++) {\n        vec3 p = ro + rd * tot;\n        float g1 = abs(dot(sin(p * 2.2), cos(p.yzx * 2.2))) - 0.08;\n        float g2 = abs(dot(sin(p * 4.5), cos(p.zxy * 4.5))) - 0.05;\n        float axon = max(g1, g2) * 0.35;\n\n        float spikeWave = pow(0.5 + 0.5 * sin(length(p) * 3.5 - t * 4.2), 8.0);\n        float glow = 0.0018 / (0.012 + axon * axon * 38.0) * exp(-tot * 0.22);\n        vec3 c = mix(vec3(0.08, 0.38, 0.95), vec3(1.0, 0.42, 0.85), spikeWave);\n        col += c * glow * (0.65 + 1.4 * spikeWave);\n        tot += max(axon * 0.7, 0.03);\n        if (tot > 8.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "16",
+    "slug": "anamorphic-laser-tunnel",
+    "title": "BERKHAIN // Volumetric Laser Haze Array",
+    "category": "Audio-Visual & Stage",
+    "category_ru": "Аудиореактив и Сцена",
+    "price": 69,
+    "tech": [
+      "Volumetric Laser Cones",
+      "Atmospheric Mie Scattering",
+      "LFO Strobe",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Концертный лазерный сетап в густом тумане с объёмным рассеянием света и синхронной модуляцией лучей.",
+    "script_filename": "project_16.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv;\n    vec3 col = vec3(0.004, 0.005, 0.01);\n    vec2 origin = vec2(m.x * 0.35, 0.42 + m.y * 0.2);\n    vec2 dir = p - origin;\n    float dist = length(dir);\n    float ang = atan(dir.y, dir.x);\n\n    float fog = 0.45 + 0.55 * fbm(p * 3.5 + vec2(0.0, -t * 0.4));\n    for (int i = 0; i < 9; i++) {\n        float fi = float(i) - 4.0;\n        float targetAng = -1.5708 + fi * 0.18 + 0.12 * sin(t * 1.8 + fi * 0.9);\n        float beam = exp(-abs(ang - targetAng) * 55.0) * exp(-dist * 0.45);\n        vec3 lCol = mix(vec3(0.0, 1.0, 0.65), vec3(0.1, 0.55, 1.0), abs(fi) / 4.0);\n        col += lCol * beam * fog * 0.85;\n    }\n    // Horizontal scanning laser fan sheet\n    float scanY = -0.15 + 0.25 * sin(t * 1.2);\n    float sheet = exp(-abs(p.y - scanY - 0.08 * sin(p.x * 6.0 + t * 3.0)) * 42.0);\n    col += vec3(1.0, 0.18, 0.45) * sheet * fog * 0.9;\n    col += vec3(0.8, 0.95, 1.0) * exp(-dist * 14.0) * 0.8;\n    col = aces(col * 1.2);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "17",
+    "slug": "xy-vector-oscilloscope",
+    "title": "TEKTRONIX-XY // CRT Lissajous Harmonics",
+    "category": "Audio-Visual & Stage",
+    "category_ru": "Аудиореактив и Сцена",
+    "price": 65,
+    "tech": [
+      "Parametric XY Synthesis",
+      "P31 Phosphor Persistence",
+      "Graticule Overlay",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Аналоговый векторный XY-осциллограф с зелёно-голубым люминофором P31, синтезирующий 3D-гармоники Лиссажу.",
+    "script_filename": "project_17.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.012, 0.008);\n    // Subtle oscilloscope calibration grid\n    vec2 grid = abs(fract(uv * 5.0) - 0.5);\n    float gridLine = smoothstep(0.015, 0.0, min(grid.x, grid.y)) * 0.04;\n    col += vec3(0.1, 0.4, 0.25) * gridLine;\n\n    float freqX = 3.0, freqY = 4.0, freqZ = 5.0;\n    for (int i = 0; i < 200; i++) {\n        float s = float(i) / 200.0 * 6.28318;\n        vec3 pt = vec3(\n            sin(freqX * s + t * 0.9) * cos(s + t * 0.3),\n            sin(freqY * s + t * 0.7 + m.x * 2.0),\n            cos(freqZ * s - t * 0.5 + m.y * 2.0)\n        ) * 0.38;\n        pt.xz *= rot(t * 0.35 + m.x);\n        pt.yz *= rot(m.y);\n        vec2 proj = pt.xy / (1.0 + pt.z * 0.4);\n        float d = length(uv - proj);\n        col += vec3(0.12, 1.0, 0.58) * (0.00022 / (d * d + 0.00012));\n    }\n    col *= smoothstep(1.05, 0.25, length(uv));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "18",
+    "slug": "joy-division-spectral-pulsar",
+    "title": "CP-1919 // Spectral Ridge Waterfall",
+    "category": "Audio-Visual & Stage",
+    "category_ru": "Аудиореактив и Сцена",
+    "price": 69,
+    "tech": [
+      "Multi-Line Horizon Occlusion",
+      "Spectral Envelope FBM",
+      "Crisp Anti-Aliasing",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Культовая спектральная визуализация радиопульсара CP 1919 с честным перекрытием горизонтов (Hidden Line Removal).",
+    "script_filename": "project_18.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.005, 0.006, 0.012);\n    float maxY = -10.0;\n    for (int i = 0; i < 42; i++) {\n        float fi = float(i) / 42.0;\n        float baseY = -0.36 + fi * 0.72;\n        float xNorm = uv.x * 1.4;\n        if (abs(xNorm) < 0.75) {\n            float env = exp(-pow((xNorm - m.x * 0.25) * 3.2, 2.0));\n            float wave = fbm(vec2(xNorm * 6.5, fi * 12.0 - t * 0.65)) * env * 0.22;\n            wave += 0.015 * sin(xNorm * 24.0 + t * 2.0 + fi * 10.0) * env;\n            float lineY = baseY + wave;\n            if (uv.y < lineY && lineY > maxY) {\n                col = vec3(0.005, 0.006, 0.012); // occlude lines behind\n            }\n            float d = abs(uv.y - lineY);\n            if (lineY >= maxY - 0.008) {\n                float stroke = smoothstep(0.0045, 0.0008, d);\n                vec3 lCol = mix(vec3(0.25, 0.82, 1.0), vec3(1.0, 0.55, 0.85), env * 1.4);\n                col += lCol * stroke;\n            }\n            maxY = max(maxY, lineY);\n        }\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "19",
+    "slug": "ferrofluid-magnetic-spikes",
+    "title": "FERRO-X // Magnetic Liquid Metal Core",
+    "category": "Audio-Visual & Stage",
+    "category_ru": "Аудиореактив и Сцена",
+    "price": 89,
+    "tech": [
+      "Spherical Harmonic Spikes",
+      "Liquid Chrome PBR",
+      "Studio Rim Lights",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Ферромагнитная жидкость в переменном магнитном поле: зеркальное ядро из жидкого металла, ощетинивающееся пиками.",
+    "script_filename": "project_19.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.2);\n    vec3 rd = normalize(vec3(uv, 1.4));\n    vec3 col = vec3(0.005, 0.007, 0.012);\n\n    float tot = 0.0;\n    for (int i = 0; i < 80; i++) {\n        vec3 p = ro + rd * tot;\n        vec3 q = p;\n        q.yz *= rot(m.y * 1.5 + t * 0.25);\n        q.xz *= rot(m.x * 1.8 + t * 0.35);\n        float r = length(q);\n        vec3 nDir = q / (r + 1e-4);\n        float spikes = pow(0.5 + 0.5 * sin(nDir.x * 9.0 + t) * cos(nDir.y * 9.0 - t) * sin(nDir.z * 9.0), 2.2);\n        float d = (r - 0.78 - spikes * (0.38 + 0.1 * breath)) * 0.55;\n        if (d < 0.002) {\n            vec2 e = vec2(0.003, 0.0);\n            // Approximate normal from radial + spike gradient\n            vec3 nor = normalize(p + 0.35 * sin(q * 9.0));\n            vec3 ref = reflect(rd, nor);\n            float fres = pow(1.0 - max(dot(-rd, nor), 0.0), 3.0);\n            float spec1 = pow(max(dot(ref, normalize(vec3(1.0, 1.2, -0.8))), 0.0), 40.0);\n            float spec2 = pow(max(dot(ref, normalize(vec3(-1.2, -0.8, -0.5))), 0.0), 28.0);\n            col = vec3(0.04, 0.06, 0.1) + vec3(0.2, 0.85, 1.0) * (spec1 * 1.4 + fres * 0.9)\n                  + vec3(1.0, 0.45, 0.15) * spec2 * 1.2;\n            break;\n        }\n        tot += max(d, 0.012);\n        if (tot > 5.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "20",
+    "slug": "chladni-cymatics-resonance",
+    "title": "CHLADNI // Acoustic Cymatics Nodal Plate",
+    "category": "Audio-Visual & Stage",
+    "category_ru": "Аудиореактив и Сцена",
+    "price": 69,
+    "tech": [
+      "Eigenmode Wave PDE",
+      "Harmonic Mode Morphing",
+      "Gold Sand Accumulation",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Киматика пластины Хладни: стоячие акустические волны собирают золотые микрочастицы вдоль узловых линий резонанса.",
+    "script_filename": "project_20.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 1.85;\n    vec3 col = vec3(0.005, 0.006, 0.01);\n    if (max(abs(p.x), abs(p.y)) < 0.88) {\n        float n = 3.0 + floor(mod(t * 0.25, 4.0)) + m.x * 1.5;\n        float k = 5.0 + floor(mod(t * 0.18 + 1.5, 4.0)) + m.y * 1.5;\n        float pi = 3.14159265;\n        float w1 = cos(n * pi * p.x) * cos(k * pi * p.y) - cos(k * pi * p.x) * cos(n * pi * p.y);\n        float w2 = cos((n+1.0) * pi * p.x) * cos((k+2.0) * pi * p.y) - cos((k+2.0) * pi * p.x) * cos((n+1.0) * pi * p.y);\n        float w = mix(w1, w2, 0.5 + 0.5 * sin(t * 0.6));\n\n        float nodal = exp(-abs(w) * 18.0);\n        float grain = 0.65 + 0.35 * hash21(floor(uv * 600.0));\n        col += mix(vec3(1.0, 0.72, 0.28), vec3(0.25, 0.88, 1.0), abs(w1) * 0.5) * nodal * grain * 1.25;\n        // Plate border\n        float border = smoothstep(0.01, 0.0, abs(max(abs(p.x), abs(p.y)) - 0.875));\n        col += vec3(0.3, 0.5, 0.7) * border * 0.4;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "21",
+    "slug": "kinetic-mirror-matrix",
+    "title": "MIRROR-ARRAY // 1,024 Motorized Specular Tiles",
+    "category": "Architecture & Light",
+    "category_ru": "Архитектура и Кинетика",
+    "price": 79,
+    "tech": [
+      "Tilted Normal Array",
+      "Anisotropic Specular",
+      "Wave Phase Propagation",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Кинетическая фасадная матрица из 1 024 моторизованных зеркал, отражающих бегущую световую волну.",
+    "script_filename": "project_21.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 gridUV = uv * 16.0;\n    vec2 cellId = floor(gridUV);\n    vec2 cellF = fract(gridUV) - 0.5;\n    vec2 cellPos = (cellId + 0.5) / 16.0;\n\n    float dMouse = length(cellPos - m * 0.4);\n    float wave = sin(dMouse * 10.0 - t * 2.4);\n    vec2 tilt = normalize(cellPos - m * 0.4 + 1e-4) * wave * 0.45;\n    vec3 nor = normalize(vec3(tilt, 1.0));\n\n    vec3 rd = normalize(vec3(uv, 1.5));\n    vec3 ref = reflect(rd, nor);\n    float spec1 = pow(max(dot(ref, normalize(vec3(0.5, 0.8, -1.0))), 0.0), 24.0);\n    float spec2 = pow(max(dot(ref, normalize(vec3(-0.7, -0.4, -1.0))), 0.0), 18.0);\n\n    float tileMask = smoothstep(0.46, 0.41, length(cellF));\n    vec3 col = (vec3(0.02, 0.03, 0.05) + vec3(0.18, 0.82, 1.0) * spec1 * 1.5 + vec3(1.0, 0.55, 0.15) * spec2 * 1.2) * tileMask;\n    col *= smoothstep(1.15, 0.2, length(uv));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "22",
+    "slug": "brutalist-monolith-godrays",
+    "title": "MONOLITH // Brutalist Canyon & Godrays",
+    "category": "Architecture & Light",
+    "category_ru": "Архитектура и Кинетика",
+    "price": 85,
+    "tech": [
+      "Architectural Box SDF",
+      "Volumetric Shadow Raymarch",
+      "Crepuscular Rays",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Бруталистский мегалит с прорезающими бетонный каньон объёмными солнечными лучами (Volumetric Godrays).",
+    "script_filename": "project_22.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(m.x * 0.8, -0.2 + m.y * 0.6, -3.5);\n    vec3 rd = normalize(vec3(uv, 1.35));\n    vec3 lightPos = vec3(sin(t * 0.35) * 1.8, 1.6, 2.5);\n\n    vec3 col = vec3(0.005, 0.008, 0.015);\n    float tot = 0.0;\n    for (int i = 0; i < 70; i++) {\n        vec3 p = ro + rd * tot;\n        // Architectural brutalist ribs & canyon slit\n        float canyon = abs(p.x) - 0.55;\n        float ribs = abs(mod(p.z + t * 0.3, 0.65) - 0.325) - 0.14;\n        float d = max(canyon, -ribs);\n        d = min(d, p.y + 1.1);\n\n        // Volumetric light shaft visibility toward lightPos\n        vec3 toL = normalize(lightPos - p);\n        float shaft = exp(-abs(p.x - toL.x * (p.z + 1.5) * 0.35) * 4.5) * exp(-max(p.y - 1.2, 0.0) * 2.0);\n        col += mix(vec3(1.0, 0.62, 0.22), vec3(0.2, 0.75, 1.0), tot * 0.15) * shaft * 0.016;\n\n        if (d < 0.002) {\n            float occ = clamp(abs(p.x) * 1.2, 0.1, 1.0);\n            col += vec3(0.06, 0.08, 0.11) * occ;\n            break;\n        }\n        tot += max(d * 0.65, 0.03);\n        if (tot > 7.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "23",
+    "slug": "hypercube-infinity-chamber",
+    "title": "TESSERACT // 4D Hypercube Projection",
+    "category": "Architecture & Light",
+    "category_ru": "Архитектура и Кинетика",
+    "price": 89,
+    "tech": [
+      "4D Tesseract Wireframe",
+      "XW/YZ Plane Rotation",
+      "Perspective 4D->3D",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Четырёхмерный тессеракт (гиперкуб), вращающийся одновременно в плоскостях XW и YZ с перспективной 4D-проекцией.",
+    "script_filename": "project_23.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.6);\n    vec3 rd = normalize(vec3(uv, 1.45));\n    vec3 col = vec3(0.004, 0.006, 0.014);\n\n    // 16 vertices & 32 edges of a 4D hypercube evaluated via folded 4D distance\n    float tot = 0.0;\n    for (int i = 0; i < 68; i++) {\n        vec3 p = ro + rd * tot;\n        p.yz *= rot(m.y * 1.4 + 0.35);\n        p.xz *= rot(m.x * 1.8 + t * 0.25);\n\n        // Dual nested cube frame linked by 4D w-phase\n        float wPhase = sin(t * 0.55);\n        float sOuter = 1.05 + 0.25 * wPhase;\n        float sInner = 0.52 - 0.15 * wPhase;\n\n        vec3 a1 = abs(p) - sOuter;\n        vec3 e1 = abs(a1);\n        float box1Edge = min(min(max(e1.x, e1.y), max(e1.y, e1.z)), max(e1.x, e1.z));\n        box1Edge = max(box1Edge, max(max(a1.x, a1.y), a1.z)) - 0.018;\n\n        vec3 a2 = abs(p) - sInner;\n        vec3 e2 = abs(a2);\n        float box2Edge = min(min(max(e2.x, e2.y), max(e2.y, e2.z)), max(e2.x, e2.z));\n        box2Edge = max(box2Edge, max(max(a2.x, a2.y), a2.z)) - 0.016;\n\n        // Corner struts connecting inner and outer cubes\n        vec3 pAbs = abs(p);\n        float diag = length(cross(normalize(pAbs - sInner), vec3(0.57735))) * length(pAbs - sInner);\n        diag = max(diag - 0.015, max(min(pAbs.x, min(pAbs.y, pAbs.z)) - sOuter, sInner - max(pAbs.x, max(pAbs.y, pAbs.z))));\n\n        float d = min(min(box1Edge, box2Edge), diag);\n        float glow = 0.0016 / (0.012 + d * d * 45.0);\n        col += mix(vec3(0.15, 0.85, 1.0), vec3(1.0, 0.45, 0.2), smoothstep(sInner, sOuter, length(p))) * glow;\n        tot += max(d * 0.65, 0.02);\n        if (tot > 6.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "24",
+    "slug": "swiss-kinetic-constructivism",
+    "title": "BAUHAUS-70 // Kinetic Constructivist Grid",
+    "category": "Architecture & Light",
+    "category_ru": "Архитектура и Кинетика",
+    "price": 59,
+    "tech": [
+      "Procedural Swiss Grid",
+      "Mechanical Easing Curves",
+      "Crisp SDF Primitives",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Швейцарская кинетическая модульная сетка в стиле Баухаус с синхронизированной механикой геометрии.",
+    "script_filename": "project_24.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 3.0;\n    vec2 id = floor(p);\n    vec2 f = fract(p) - 0.5;\n    float rnd = hash21(id);\n    float phase = floor(t * 0.8 + rnd * 4.0) + smoothstep(0.2, 0.8, fract(t * 0.8 + rnd * 4.0));\n    f *= rot(floor(rnd * 4.0) * 1.570796 + phase * 1.570796);\n\n    float arc = abs(length(f - vec2(0.5)) - 0.5) - 0.08;\n    float bar = abs(f.x + f.y) - 0.08;\n    float d = (fract(rnd * 7.3) > 0.45) ? arc : bar;\n\n    float mask = smoothstep(0.015, -0.015, d);\n    float gridBorder = smoothstep(0.49, 0.47, max(abs(f.x), abs(f.y)));\n    vec3 accent = (fract(rnd * 13.7) > 0.72) ? vec3(1.0, 0.32, 0.12) : vec3(0.88, 0.92, 0.96);\n    if (fract(rnd * 19.1) > 0.85) accent = vec3(0.15, 0.78, 1.0);\n    vec3 col = vec3(0.01, 0.012, 0.018) + accent * mask * gridBorder * 0.9;\n    col *= smoothstep(1.15, 0.25, length(uv));\n    col = aces(col * 1.1);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "25",
+    "slug": "abyssal-water-caustics",
+    "title": "CAUSTICS // Refractive Optical Photon Pool",
+    "category": "Architecture & Light",
+    "category_ru": "Архитектура и Кинетика",
+    "price": 75,
+    "tech": [
+      "Refractive Wave Jacobian",
+      "Chromatic Caustic Split",
+      "Interactive Ripple",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Оптические каустики преломления света на дне глубоководного бассейна с хроматической дисперсией и реакцией на курсор.",
+    "script_filename": "project_25.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 2.4;\n    float ripple = sin(length(uv - m * 0.45) * 18.0 - t * 4.0) * exp(-length(uv - m * 0.45) * 3.5) * 0.12;\n    vec3 col = vec3(0.003, 0.015, 0.032);\n    for (int c = 0; c < 3; c++) {\n        vec2 q = p + ripple + float(c) * 0.012;\n        float v = 0.0;\n        for (int i = 0; i < 4; i++) {\n            float fi = float(i) + 1.0;\n            q = rot(0.65) * q * 1.32 + vec2(t * 0.18 * fi, -t * 0.14 * fi);\n            v += 1.0 / (0.12 + abs(sin(q.x * 3.0) + cos(q.y * 3.0)));\n        }\n        col[c] += pow(v * 0.068, 2.6) * (c == 0 ? 0.35 : (c == 1 ? 0.88 : 1.05));\n    }\n    col *= smoothstep(1.1, 0.15, length(uv));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "26",
+    "slug": "mandelbulb-power8-fractal",
+    "title": "MANDELBULB-8 // 3D Power-8 Strange Fractal",
+    "category": "Fractals & Quantum",
+    "category_ru": "Фракталы и Квантовый Мир",
+    "price": 99,
+    "tech": [
+      "Power-8 Triplex Algebra",
+      "Orbit-Trap Coloring",
+      "Soft Ambient Occlusion",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Трёхмерный фрактал Мандельбульб 8-й степени с мягким затенением (Ambient Occlusion) и золотым орбит-трэпом.",
+    "script_filename": "project_26.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -2.55);\n    ro.yz *= rot(m.y * 1.4 + 0.25);\n    ro.xz *= rot(m.x * 1.8 + t * 0.16);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.45 * ww);\n\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    float tot = 0.0;\n    float power = 8.0 + 1.5 * sin(t * 0.25);\n    for (int step = 0; step < 72; step++) {\n        vec3 p = ro + rd * tot;\n        vec3 z = p;\n        float dr = 1.0, r = 0.0, trap = 10.0;\n        for (int i = 0; i < 7; i++) {\n            r = length(z);\n            if (r > 2.0) break;\n            trap = min(trap, abs(z.y) + 0.35 * abs(z.x));\n            float theta = acos(clamp(z.z / r, -1.0, 1.0)) * power;\n            float phi = atan(z.y, z.x) * power;\n            dr = pow(r, power - 1.0) * power * dr + 1.0;\n            float zr = pow(r, power);\n            z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta)) + p;\n        }\n        float d = 0.5 * log(r) * r / dr;\n        if (d < 0.0018) {\n            float ao = 1.0 - float(step) / 72.0;\n            vec3 surf = mix(vec3(1.0, 0.62, 0.18), vec3(0.12, 0.78, 1.0), clamp(trap * 1.4, 0.0, 1.0));\n            col = surf * pow(ao, 1.6) * 1.35;\n            break;\n        }\n        tot += d;\n        if (tot > 4.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "27",
+    "slug": "apollonian-sphere-cathedral",
+    "title": "APOLLONIUS // Kleinian Sphere Inversion Vault",
+    "category": "Fractals & Quantum",
+    "category_ru": "Фракталы и Квантовый Мир",
+    "price": 95,
+    "tech": [
+      "Kleinian Sphere Inversion",
+      "Volumetric Vault Fog",
+      "Orbit Trap Lighting",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Бесконечный подземный собор Аполлония, построенный рекурсивной инверсией сфер (Kleinian Group Fractal).",
+    "script_filename": "project_27.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(m.x * 0.5, m.y * 0.4, t * 0.22);\n    vec3 rd = normalize(vec3(uv, 1.25));\n    rd.xz *= rot(m.x * 0.45);\n    rd.yz *= rot(m.y * 0.35);\n\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    float tot = 0.0;\n    for (int step = 0; step < 75; step++) {\n        vec3 p = ro + rd * tot;\n        float scale = 1.0, orb = 10.0;\n        for (int i = 0; i < 6; i++) {\n            p = -1.0 + 2.0 * fract(0.5 * p + 0.5);\n            float r2 = dot(p, p);\n            float k = 1.28 / max(r2, 0.15);\n            p *= k;\n            scale *= k;\n            orb = min(orb, r2);\n        }\n        float d = 0.25 * abs(p.y) / scale;\n        if (d < 0.0015) {\n            float ao = 1.0 - float(step) / 75.0;\n            vec3 c = mix(vec3(1.0, 0.68, 0.22), vec3(0.15, 0.82, 1.0), clamp(orb * 1.5, 0.0, 1.0));\n            col = c * ao * exp(-tot * 0.18) * 1.3;\n            break;\n        }\n        tot += d * 0.85;\n        if (tot > 8.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "28",
+    "slug": "menger-sponge-megastructure",
+    "title": "MENGER-IFS // Infinite Cyber Megastructure",
+    "category": "Fractals & Quantum",
+    "category_ru": "Фракталы и Квантовый Мир",
+    "price": 85,
+    "tech": [
+      "IFS Kaleidoscopic Folding",
+      "Interior Energy Conduits",
+      "Raymarched AO",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Бесконечная фрактальная мегаструктура губки Менгера с неоновыми энергетическими каналами внутри.",
+    "script_filename": "project_28.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -2.6);\n    ro.yz *= rot(m.y * 1.2 + 0.3);\n    ro.xz *= rot(m.x * 1.6 + t * 0.15);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    float tot = 0.0;\n    for (int step = 0; step < 72; step++) {\n        vec3 p = ro + rd * tot;\n        vec3 q = abs(p) - 1.0;\n        float d = max(q.x, max(q.y, q.z));\n        float s = 1.0;\n        for (int i = 0; i < 4; i++) {\n            vec3 a = mod(p * s, 2.0) - 1.0;\n            s *= 3.0;\n            vec3 r = abs(1.0 - 3.0 * abs(a));\n            float da = max(r.x, r.y), db = max(r.y, r.z), dc = max(r.z, r.x);\n            float c = (min(da, min(db, dc)) - 1.0) / s;\n            d = max(d, c);\n        }\n        if (d < 0.0018) {\n            float ao = 1.0 - float(step) / 72.0;\n            float glowBand = pow(0.5 + 0.5 * sin(length(p) * 18.0 - t * 3.0), 6.0);\n            col = (vec3(0.12, 0.18, 0.26) + vec3(0.15, 0.85, 1.0) * glowBand * 1.8) * ao;\n            break;\n        }\n        tot += d;\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "29",
+    "slug": "poincare-hyperbolic-escher",
+    "title": "POINCARÉ // Hyperbolic Non-Euclidean Disk",
+    "category": "Fractals & Quantum",
+    "category_ru": "Фракталы и Квантовый Мир",
+    "price": 89,
+    "tech": [
+      "Möbius Transformations",
+      "Hyperbolic Geodesic Inversions",
+      "Poincaré Metric",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Неевклидова гиперболическая геометрия диска Пуанкаре: бесконечная мозаика геодезических окружностей с преобразованиями Мёбиуса.",
+    "script_filename": "project_29.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 z = uv * 2.15;\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    float r = length(z);\n    if (r < 0.99) {\n        // Möbius isomerism inside the unit disk\n        vec2 a = vec2(sin(t * 0.35) * 0.35 + m.x * 0.25, cos(t * 0.28) * 0.35 + m.y * 0.25);\n        vec2 num = z - a;\n        vec2 den = vec2(1.0, 0.0) - vec2(a.x * z.x + a.y * z.y, a.x * z.y - a.y * z.x);\n        z = vec2(num.x * den.x + num.y * den.y, num.y * den.x - num.x * den.y) / dot(den, den);\n\n        float invCount = 0.0;\n        for (int i = 0; i < 14; i++) {\n            z.x = abs(z.x);\n            z *= rot(0.6283185); // pi/5 pentagonal symmetry\n            vec2 c = vec2(1.22, 0.0);\n            float rad2 = 0.4884;\n            vec2 dz = z - c;\n            if (dot(dz, dz) < rad2) {\n                z = c + dz * rad2 / dot(dz, dz);\n                invCount += 1.0;\n            }\n        }\n        float edge = length(z);\n        float glow = exp(-abs(edge - 0.55) * 18.0);\n        vec3 tileCol = 0.5 + 0.5 * cos(invCount * 0.85 + vec3(0.0, 2.1, 4.2));\n        col = tileCol * (0.25 + 0.95 * glow) * smoothstep(0.99, 0.92, r);\n        col += vec3(1.0, 0.72, 0.28) * exp(-abs(r - 0.98) * 65.0);\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "30",
+    "slug": "quantum-hydrogen-orbital",
+    "title": "PSI-4F // Quantum Atomic Wavefunction",
+    "category": "Fractals & Quantum",
+    "category_ru": "Фракталы и Квантовый Мир",
+    "price": 95,
+    "tech": [
+      "Spherical Harmonics Y_lm",
+      "Laguerre Radial Nodes",
+      "Complex Phase Coloring",
+      "GLSL TOP"
+    ],
+    "desc_ru": "Квантовая волновая функция Ψ(r,θ,φ) водородоподобного атома (4f / 5g орбитали) с цветовым кодированием квантовой фазы.",
+    "script_filename": "project_30.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.8);\n    ro.yz *= rot(m.y * 1.5 + 0.35);\n    ro.xz *= rot(m.x * 1.8 + t * 0.2);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.003, 0.005, 0.012);\n    float tot = 1.0;\n    for (int i = 0; i < 68; i++) {\n        vec3 p = ro + rd * tot;\n        float r = length(p) * 2.2;\n        if (r < 4.5) {\n            vec3 n = p / (length(p) + 1e-4);\n            // Spherical harmonics Y_3^2 and Y_4^3 superposition\n            float y32 = n.z * (n.x * n.x - n.y * n.y);\n            float y43 = n.z * n.x * (n.x * n.x - 3.0 * n.y * n.y);\n            float angular = mix(y32, y43, 0.5 + 0.5 * sin(t * 0.45));\n            // Laguerre radial polynomial node shells\n            float radial = r * r * (2.4 - r) * exp(-r * 0.95);\n            float psi = radial * angular;\n            float prob = psi * psi * 14.0;\n\n            float phi = atan(n.y, n.x) * 2.0 + sign(psi) * 1.5708 - t * 0.8;\n            vec3 phaseCol = mix(vec3(0.15, 0.82, 1.0), vec3(1.0, 0.42, 0.18), 0.5 + 0.5 * sin(phi));\n            col += phaseCol * prob * 0.095;\n        }\n        tot += 0.065;\n        if (tot > 5.6) break;\n    }\n    col = aces(col * 1.25);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "31",
+    "slug": "lsystem-botanical-bonsai",
+    "title": "LSYSTEM-BOTANICA // Fractal Cyber Bonsai",
+    "category": "SOP: Procedural 3D",
+    "category_ru": "SOP: Процедурная 3D-Геометрия",
+    "price": 89,
+    "tech": [
+      "lsystemSOP",
+      "wireframeSOP",
+      "lineMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Рекурсивное 3D L-System дерево с процедурным ветвлением, ветровой модуляцией и светящимися капиллярами (lsystemSOP + lineMAT).",
+    "script_filename": "project_31.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 2.2;\n    p.y += 0.75;\n    vec3 col = vec3(0.004, 0.008, 0.015);\n    float scale = 1.0;\n    float minD = 10.0;\n    float branchIdx = 0.0;\n    for (int i = 0; i < 7; i++) {\n        float fi = float(i);\n        p.y -= 0.36;\n        if (p.y > 0.0) {\n            p.x = abs(p.x);\n            float ang = 0.48 + 0.08 * sin(t * 1.2 + fi + m.x * 2.0);\n            p *= rot(ang);\n            p *= 1.38;\n            scale *= 1.38;\n            branchIdx += 1.0;\n        }\n        float seg = length(vec2(p.x, p.y - clamp(p.y, -0.36, 0.0))) / scale;\n        minD = min(minD, seg);\n    }\n    float glow = 0.0018 / (0.006 + minD * minD * 65.0);\n    float sap = 0.5 + 0.5 * sin(branchIdx * 1.4 - t * 3.5);\n    col += mix(vec3(0.1, 0.9, 0.65), vec3(1.0, 0.45, 0.75), branchIdx / 7.0) * glow * (0.7 + 0.5 * sap);\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "32",
+    "slug": "superquad-parametric-morph",
+    "title": "SUPERQUAD // Parametric Star Polyhedron",
+    "category": "SOP: Procedural 3D",
+    "category_ru": "SOP: Процедурная 3D-Геометрия",
+    "price": 79,
+    "tech": [
+      "superquadSOP",
+      "twistSOP",
+      "phongMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Параметрическая суперквадрика (superquadSOP + twistSOP), плавно морфирующая между октаэдром, звездой и тором.",
+    "script_filename": "project_32.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.4);\n    ro.yz *= rot(m.y * 1.4 + 0.3);\n    ro.xz *= rot(m.x * 1.8 + t * 0.25);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.004, 0.007, 0.015);\n    float tot = 0.0;\n    float expP = 0.65 + 0.45 * sin(t * 0.6);\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        p.xz *= rot(p.y * (0.8 + m.x) + t * 0.2);\n        vec3 a = abs(p) + 1e-4;\n        float d = (pow(pow(a.x, expP) + pow(a.y, expP) + pow(a.z, expP), 1.0 / expP) - 1.05) * 0.45;\n        float glow = 0.0014 / (0.015 + d * d * 42.0);\n        col += mix(vec3(0.15, 0.82, 1.0), vec3(1.0, 0.52, 0.15), clamp(p.y + 0.5, 0.0, 1.0)) * glow;\n        if (d < 0.002) { col += vec3(0.85, 0.92, 1.0) * 0.55; break; }\n        tot += max(d, 0.015);\n        if (tot > 6.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "33",
+    "slug": "metaball-isosurface-lattice",
+    "title": "METABALL-ISO // Organic IsoSurface Mesh",
+    "category": "SOP: Procedural 3D",
+    "category_ru": "SOP: Процедурная 3D-Геометрия",
+    "price": 85,
+    "tech": [
+      "metaballSOP",
+      "wireframeMAT",
+      "phongMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Органическая изоповерхность метаболов (metaballSOP) с полигональной сеткой и двойным студийным освещением.",
+    "script_filename": "project_33.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.5);\n    vec3 rd = normalize(vec3(uv, 1.4));\n    vec3 col = vec3(0.005, 0.007, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 68; i++) {\n        vec3 p = ro + rd * tot;\n        p.xz *= rot(t * 0.25 + m.x);\n        p.yz *= rot(m.y);\n        float field = 0.0;\n        for (int k = 0; k < 5; k++) {\n            float fk = float(k) * 1.2566;\n            vec3 c = 0.65 * vec3(cos(t * 0.7 + fk), sin(t * 0.9 + fk * 1.3), sin(t * 0.5 - fk));\n            field += 0.22 / (dot(p - c, p - c) + 0.04);\n        }\n        float d = (1.0 - field) * 0.25;\n        float wire = abs(sin(p.x * 18.0) * sin(p.y * 18.0) * sin(p.z * 18.0));\n        if (d < 0.004) {\n            col = mix(vec3(0.08, 0.78, 0.95), vec3(1.0, 0.45, 0.2), wire) * (0.55 + 0.45 * (1.0 - float(i)/68.0));\n            break;\n        }\n        tot += max(d, 0.02);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.2);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "34",
+    "slug": "sweep-mobius-ribbon",
+    "title": "SWEEP-MÖBIUS // Twisted Architectural Strip",
+    "category": "SOP: Procedural 3D",
+    "category_ru": "SOP: Процедурная 3D-Геометрия",
+    "price": 75,
+    "tech": [
+      "torusSOP",
+      "twistSOP",
+      "lineMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Архитектурная лента Мёбиуса со скрученным профилем сечения и неоновыми продольными направляющими.",
+    "script_filename": "project_34.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.5);\n    ro.yz *= rot(m.y * 1.3 + 0.4);\n    ro.xz *= rot(m.x * 1.8 + t * 0.22);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 75; i++) {\n        vec3 p = ro + rd * tot;\n        float a = atan(p.z, p.x);\n        vec2 q = vec2(length(p.xz) - 1.15, p.y);\n        q *= rot(a * 0.5 + t * 0.4);\n        float d = max(abs(q.x) - 0.34, abs(q.y) - 0.035);\n        float rail = abs(abs(q.x) - 0.32) - 0.015;\n        float glow = 0.0014 / (0.012 + rail * rail * 55.0);\n        col += mix(vec3(0.15, 0.85, 1.0), vec3(1.0, 0.38, 0.65), 0.5 + 0.5 * sin(a + t)) * glow;\n        if (d < 0.002) { col += vec3(0.12, 0.2, 0.32); break; }\n        tot += max(d * 0.65, 0.015);\n        if (tot > 6.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "35",
+    "slug": "spring-cloth-tension-mesh",
+    "title": "SPRING-MESH // Elastic Tension Lattice",
+    "category": "SOP: Procedural 3D",
+    "category_ru": "SOP: Процедурная 3D-Геометрия",
+    "price": 79,
+    "tech": [
+      "gridSOP",
+      "noiseSOP",
+      "lineMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Упругая полигональная мембрана с волнами натяжения и гравитационным продавливанием под курсором.",
+    "script_filename": "project_35.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 1.35 + m.y * 0.6, -2.8);\n    vec3 ww = normalize(vec3(0.0, -0.2, 0.0) - ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.35 * ww);\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 68; i++) {\n        vec3 p = ro + rd * tot;\n        float r = length(p.xz - m * 1.2);\n        float well = -0.65 * exp(-r * r * 1.6) * cos(r * 6.0 - t * 3.5);\n        float d = abs(p.y - well) * 0.55;\n        vec2 g = abs(fract(p.xz * 4.5) - 0.5);\n        float gridLine = min(g.x, g.y);\n        if (d < 0.015 && max(abs(p.x), abs(p.z)) < 1.8) {\n            float line = smoothstep(0.06, 0.0, gridLine);\n            col += mix(vec3(0.1, 0.78, 1.0), vec3(1.0, 0.55, 0.18), exp(-r * 1.2)) * (0.08 + 0.92 * line);\n            break;\n        }\n        tot += max(d, 0.02);\n        if (tot > 6.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "36",
+    "slug": "fullerene-geodesic-dome",
+    "title": "FULLERENE-C60 // Geodesic Buckminster Cage",
+    "category": "SOP: Procedural 3D",
+    "category_ru": "SOP: Процедурная 3D-Геометрия",
+    "price": 85,
+    "tech": [
+      "sphereSOP",
+      "wireframeSOP",
+      "phongMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Двухслойная геодезическая сфера Фуллера (C60 Buckyball) с дышащими гексагональными сегментами.",
+    "script_filename": "project_36.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.4);\n    ro.yz *= rot(m.y * 1.4 + t * 0.12);\n    ro.xz *= rot(m.x * 1.8 + t * 0.2);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.004, 0.007, 0.015);\n    float tot = 0.0;\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        float r = length(p);\n        vec3 n = p / (r + 1e-4);\n        float hex = abs(sin(n.x * 10.0) + sin(n.y * 10.0) + sin(n.z * 10.0));\n        float shell = abs(r - 1.15 - 0.04 * sin(t * 2.0 + hex * 3.0)) - 0.025;\n        float strut = abs(hex - 0.45) * 0.08;\n        float d = max(shell, strut);\n        float glow = 0.0014 / (0.012 + d * d * 48.0);\n        col += mix(vec3(0.15, 0.88, 1.0), vec3(1.0, 0.68, 0.22), hex * 0.4) * glow;\n        tot += max(d * 0.65, 0.018);\n        if (tot > 6.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "37",
+    "slug": "spiral-galaxy-pointcloud",
+    "title": "ANDROMEDA-PC // 32-Bit Spiral Point Cloud",
+    "category": "GPU Instancing & Point Clouds",
+    "category_ru": "GPU Instancing и Поинтклауды",
+    "price": 95,
+    "tech": [
+      "noiseTOP 32-bit Float",
+      "geometryCOMP Instancing",
+      "pointMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Поинтклауд спиральной галактики на 32-битных float текстурах с дифференциальным вращением рукавов и звёздным ядром.",
+    "script_filename": "project_37.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 1.45 + m.y * 1.2, -3.6);\n    ro.xz *= rot(m.x * 1.8 + t * 0.08);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.35 * ww);\n\n    vec3 col = vec3(0.003, 0.005, 0.012);\n    // Intersect tilted galactic plane + volumetric dust lanes\n    float tot = 0.5;\n    for (int i = 0; i < 64; i++) {\n        vec3 p = ro + rd * tot;\n        float r = length(p.xz);\n        float a = atan(p.z, p.x);\n        if (abs(p.y) < 0.35 && r < 2.6) {\n            float arm = cos(2.0 * a - log(r + 0.15) * 4.2 + t * 0.55);\n            float n = fbm(p.xz * 2.5 - t * 0.1);\n            float dens = smoothstep(-0.2, 0.85, arm + n * 0.55) * exp(-r * 0.85) * exp(-abs(p.y) * 14.0);\n            vec3 gCol = mix(vec3(1.0, 0.78, 0.45), vec3(0.18, 0.68, 1.0), smoothstep(0.25, 1.6, r));\n            gCol = mix(gCol, vec3(1.0, 0.28, 0.55), pow(n, 2.5) * 0.6);\n            col += gCol * dens * 0.16;\n        }\n        tot += 0.07;\n        if (tot > 6.0) break;\n    }\n    col = aces(col * 1.25);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "38",
+    "slug": "dna-double-helix-instancer",
+    "title": "GENOME-X // Double Helix Codon Instancer",
+    "category": "GPU Instancing & Point Clouds",
+    "category_ru": "GPU Instancing и Поинтклауды",
+    "price": 85,
+    "tech": [
+      "patternCHOP",
+      "geometryCOMP Instancing",
+      "phongMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Двойная спираль ДНК на GPU Instancing: параметрические комплементарные пары азотистых оснований с цветовой кодировкой кодонов.",
+    "script_filename": "project_38.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.007, 0.015);\n    for (int i = -24; i <= 24; i++) {\n        float fi = float(i);\n        float y = fi * 0.036;\n        float phase = fi * 0.28 - t * 1.6 + m.x * 2.5;\n        vec2 p1 = vec2(cos(phase) * 0.26, y);\n        vec2 p2 = vec2(-cos(phase) * 0.26, y);\n        float z1 = sin(phase);\n        // Rung connecting p1 and p2\n        vec2 pa = uv - p1, ba = p2 - p1;\n        float h = clamp(dot(pa, ba) / (dot(ba, ba) + 1e-5), 0.0, 1.0);\n        float dRung = length(pa - ba * h);\n        float d1 = length(uv - p1), d2 = length(uv - p2);\n\n        vec3 c1 = vec3(0.12, 0.88, 1.0) * (0.65 + 0.35 * z1);\n        vec3 c2 = vec3(1.0, 0.38, 0.62) * (0.65 - 0.35 * z1);\n        col += c1 * (0.00018 / (d1 * d1 + 0.00014));\n        col += c2 * (0.00018 / (d2 * d2 + 0.00014));\n        col += mix(c1, c2, h) * (0.00007 / (dRung * dRung + 0.00009));\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "39",
+    "slug": "tokamak-fusion-plasma-torus",
+    "title": "ITER-TOKAMAK // Helical Fusion Plasma Torus",
+    "category": "GPU Instancing & Point Clouds",
+    "category_ru": "GPU Instancing и Поинтклауды",
+    "price": 89,
+    "tech": [
+      "rampTOP",
+      "noiseTOP",
+      "geometryCOMP Instancing",
+      "renderTOP"
+    ],
+    "desc_ru": "Магнитное удержание термоядерной плазмы в токамаке: спиральные траектории заряженных частиц внутри тороидальной камеры.",
+    "script_filename": "project_39.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.9 + m.y * 1.1, -3.2);\n    ro.xz *= rot(m.x * 1.8 + t * 0.15);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.35 * ww);\n\n    vec3 col = vec3(0.004, 0.005, 0.012);\n    float tot = 0.0;\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        float phi = atan(p.z, p.x);\n        vec2 q = vec2(length(p.xz) - 1.1, p.y);\n        float rTube = length(q);\n        float theta = atan(q.y, q.x);\n        float helical = sin(theta * 5.0 + phi * 12.0 - t * 4.5);\n        float d = abs(rTube - 0.36 - 0.03 * helical) - 0.02;\n        float glow = 0.0018 / (0.012 + d * d * 48.0);\n        vec3 pCol = mix(vec3(1.0, 0.35, 0.08), vec3(0.2, 0.85, 1.0), 0.5 + 0.5 * helical);\n        col += pCol * glow;\n        tot += max(d * 0.65, 0.02);\n        if (tot > 6.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "40",
+    "slug": "kinetic-monolith-wave-matrix",
+    "title": "VOXEL-WAVE // 2,500 Kinetic Pillar Matrix",
+    "category": "GPU Instancing & Point Clouds",
+    "category_ru": "GPU Instancing и Поинтклауды",
+    "price": 79,
+    "tech": [
+      "boxSOP",
+      "noiseTOP Scale Instancing",
+      "phongMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Архитектурная матрица из 2 500 вертикальных колонн на GPU Instancing, управляемая интерференцией радиальных волн.",
+    "script_filename": "project_40.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 1.65 + m.y * 0.5, -3.2);\n    ro.xz *= rot(m.x * 1.2 + 0.6);\n    vec3 ww = normalize(vec3(0,-0.2,0) - ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.005, 0.007, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 75; i++) {\n        vec3 p = ro + rd * tot;\n        vec2 id = floor(p.xz * 6.0);\n        vec2 f = fract(p.xz * 6.0) - 0.5;\n        float r = length(id / 6.0);\n        float h = 0.28 * sin(r * 6.0 - t * 2.5) * exp(-r * 0.45);\n        vec3 b = abs(vec3(f.x / 6.0, p.y - h * 0.5, f.y / 6.0)) - vec3(0.055, 0.35 + h * 0.5, 0.055);\n        float d = max(max(b.x, b.y), b.z);\n        d = max(d, max(abs(p.x), abs(p.z)) - 1.6);\n        if (d < 0.002) {\n            float topMask = smoothstep(0.02, 0.0, abs(b.y));\n            col = mix(vec3(0.08, 0.14, 0.24), vec3(0.15, 0.88, 1.0), topMask) * (1.0 - float(i)/75.0);\n            break;\n        }\n        tot += max(d * 0.7, 0.015);\n        if (tot > 6.5) break;\n    }\n    col = aces(col * 1.2);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "41",
+    "slug": "fibonacci-phyllotaxis-lotus",
+    "title": "PHYLLOTAXIS // 137.5° Golden Ratio Spiral",
+    "category": "GPU Instancing & Point Clouds",
+    "category_ru": "GPU Instancing и Поинтклауды",
+    "price": 79,
+    "tech": [
+      "Golden Angle 137.5077°",
+      "patternCHOP",
+      "geometryCOMP",
+      "renderTOP"
+    ],
+    "desc_ru": "Золотое сечение в природе (филлотаксис 137.5°): спиральная скульптура Фибоначчи с радиальным раскрытием лепестков.",
+    "script_filename": "project_41.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    float golden = 2.39996323; // 137.5077 deg in radians\n    for (int i = 1; i < 180; i++) {\n        float fi = float(i);\n        float r = sqrt(fi / 180.0) * 0.44;\n        float a = fi * golden + t * 0.25 + sin(t * 0.8 - r * 8.0) * 0.12;\n        vec2 pt = r * vec2(cos(a), sin(a));\n        float d = length(uv - pt);\n        float pulse = 0.55 + 0.45 * sin(fi * 0.15 - t * 2.5);\n        vec3 c = mix(vec3(1.0, 0.72, 0.22), vec3(0.12, 0.85, 1.0), r * 2.1);\n        col += c * (0.00011 / (d * d + 0.00009)) * pulse;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "42",
+    "slug": "lidar-topographic-scanner",
+    "title": "LIDAR-SCAN // Autonomous Elevation Cloud",
+    "category": "GPU Instancing & Point Clouds",
+    "category_ru": "GPU Instancing и Поинтклауды",
+    "price": 85,
+    "tech": [
+      "noiseTOP Elevation",
+      "gridSOP",
+      "pointMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Топографический LiDAR-сканер рельефа с бегущим лазерным лучом и высотными изолиниями.",
+    "script_filename": "project_42.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(m.x * 0.8, 0.95 + m.y * 0.4, -2.5);\n    vec3 rd = normalize(vec3(uv.x, uv.y - 0.22, 1.3));\n    vec3 col = vec3(0.003, 0.006, 0.012);\n    float tot = 0.0;\n    for (int i = 0; i < 70; i++) {\n        vec3 p = ro + rd * tot;\n        vec2 q = p.xz + vec2(0.0, t * 0.45);\n        float h = fbm(q * 1.6) * 0.65 - 0.35;\n        float d = (p.y - h) * 0.55;\n        if (d < 0.005) {\n            float contour = exp(-abs(fract(h * 14.0) - 0.5) * 28.0);\n            float scanBeam = exp(-abs(mod(p.z + t * 1.2, 3.0) - 1.5) * 14.0);\n            vec2 dots = abs(fract(q * 24.0) - 0.5);\n            float pt = smoothstep(0.22, 0.05, length(dots));\n            col = mix(vec3(0.08, 0.78, 1.0), vec3(1.0, 0.35, 0.2), scanBeam) * (contour * 0.85 + pt * 0.65 + scanBeam * 0.9) * exp(-tot * 0.25);\n            break;\n        }\n        tot += max(d, 0.025);\n        if (tot > 6.5) break;\n    }\n    col = aces(col * 1.2);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "43",
+    "slug": "slope-displace-liquid-mercury",
+    "title": "SLOPE-FLOW // Advected Liquid Mercury TOP",
+    "category": "TOP: Feedback & Post-FX",
+    "category_ru": "TOP: Feedback-Системы и Пост-FX",
+    "price": 79,
+    "tech": [
+      "feedbackTOP",
+      "slopeTOP",
+      "displaceTOP",
+      "lookupTOP"
+    ],
+    "desc_ru": "Классический пайплайн TouchDesigner (feedbackTOP → slopeTOP → displaceTOP), рождающий переливы жидкой ртути.",
+    "script_filename": "project_43.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 2.5;\n    for (int i = 0; i < 4; i++) {\n        float fi = float(i) + 1.0;\n        vec2 grad = vec2(\n            fbm(p + vec2(0.02, 0.0) + t * 0.12 * fi) - fbm(p - vec2(0.02, 0.0) + t * 0.12 * fi),\n            fbm(p + vec2(0.0, 0.02) - t * 0.1 * fi) - fbm(p - vec2(0.0, 0.02) - t * 0.1 * fi)\n        ) * 8.5;\n        p += grad * 0.22 + m * 0.08;\n    }\n    float v = fbm(p * 1.5);\n    vec3 col = 0.5 + 0.5 * cos(v * 7.5 + vec3(0.0, 0.6, 1.2) + t * 0.3);\n    col = pow(col, vec3(1.6)) * 1.25;\n    col *= smoothstep(1.15, 0.2, length(uv));\n    col = aces(col);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "44",
+    "slug": "recursive-edge-feedback-echo",
+    "title": "EDGE-ECHO // Topographic Feedback Contours",
+    "category": "TOP: Feedback & Post-FX",
+    "category_ru": "TOP: Feedback-Системы и Пост-FX",
+    "price": 75,
+    "tech": [
+      "feedbackTOP",
+      "edgeTOP",
+      "transformTOP",
+      "rampTOP"
+    ],
+    "desc_ru": "Рекурсивное эхо контуров (feedbackTOP + edgeTOP + transformTOP) со спектральным окрашиванием через lookupTOP.",
+    "script_filename": "project_44.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 2.0;\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    for (int i = 0; i < 12; i++) {\n        float fi = float(i);\n        float sc = 1.0 + fi * 0.12 - fract(t * 0.4) * 0.12;\n        vec2 q = (p - m * 0.25) * sc * rot(fi * 0.08 + t * 0.1);\n        float shape = abs(length(q) - 0.35 - 0.08 * sin(atan(q.y, q.x) * 5.0 + t));\n        float edge = exp(-shape * 48.0) * exp(-fi * 0.18);\n        vec3 eCol = 0.5 + 0.5 * cos(fi * 0.45 - t + vec3(0.0, 2.0, 4.0));\n        col += eCol * edge * 0.55;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "45",
+    "slug": "mirror-kaleidoscope-prism",
+    "title": "PRISM-12 // 12-Fold Optical Mirror Chamber",
+    "category": "TOP: Feedback & Post-FX",
+    "category_ru": "TOP: Feedback-Системы и Пост-FX",
+    "price": 69,
+    "tech": [
+      "mirrorTOP",
+      "displaceTOP",
+      "levelTOP",
+      "compositeTOP"
+    ],
+    "desc_ru": "12-гранная оптическая зеркальная призма (mirrorTOP + displaceTOP) с кристаллической симметрией и дисперсией.",
+    "script_filename": "project_45.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 2.2;\n    float r = length(p);\n    float a = atan(p.y, p.x);\n    float sectors = 12.0;\n    a = mod(a, 6.283185 / sectors);\n    a = abs(a - 3.141592 / sectors);\n    p = r * vec2(cos(a), sin(a));\n\n    for (int i = 0; i < 5; i++) {\n        p = abs(p) - vec2(0.28 + 0.05 * sin(t * 0.6 + m.x), 0.22 + 0.05 * cos(t * 0.5 + m.y));\n        p *= rot(0.52 + t * 0.08);\n    }\n    float d = min(abs(p.x), abs(p.y));\n    float glow = 0.004 / (0.008 + d * d * 45.0);\n    vec3 col = (0.5 + 0.5 * cos(r * 5.0 - t + vec3(0.1, 2.2, 4.4))) * glow * smoothstep(1.3, 0.1, r);\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "46",
+    "slug": "convolve-cellular-automaton",
+    "title": "CONVOLVE-CA // Neural Cellular Automaton TOP",
+    "category": "TOP: Feedback & Post-FX",
+    "category_ru": "TOP: Feedback-Системы и Пост-FX",
+    "price": 85,
+    "tech": [
+      "feedbackTOP",
+      "convolveTOP",
+      "functionTOP",
+      "lookupTOP"
+    ],
+    "desc_ru": "Непрерывный клеточный автомат Lenia / Свёртка Лапласа на GPU (feedbackTOP + convolveTOP).",
+    "script_filename": "project_46.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 p = uv * 4.5 + m;\n    float f1 = fbm(p + t * 0.2);\n    float f2 = fbm(p * 2.2 - f1 * 2.5 - t * 0.15);\n    float ring = sin((f1 * 6.0 + f2 * 8.0) - t * 2.0);\n    float cells = smoothstep(0.1, 0.85, ring);\n    float rim = exp(-abs(ring) * 8.0);\n    vec3 col = vec3(0.005, 0.01, 0.02) + vec3(0.08, 0.85, 0.72) * rim * 0.75 + vec3(1.0, 0.42, 0.18) * cells * 0.35;\n    col *= smoothstep(1.15, 0.2, length(uv));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "47",
+    "slug": "timemachine-slitscan-portal",
+    "title": "CHRONO-SLIT // Time-Machine Slit-Scan Warp",
+    "category": "TOP: Feedback & Post-FX",
+    "category_ru": "TOP: Feedback-Системы и Пост-FX",
+    "price": 79,
+    "tech": [
+      "cacheTOP",
+      "timeMachineTOP",
+      "rampTOP",
+      "displaceTOP"
+    ],
+    "desc_ru": "Хронофотографический слит-скан (cacheTOP + timeMachineTOP): разные участки кадра живут в разном времени.",
+    "script_filename": "project_47.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    float r = length(uv - m * 0.3);\n    float delayedT = t * 1.8 - r * 6.5;\n    vec2 p = uv * rot(delayedT * 0.35);\n    float rings = sin(r * 28.0 - delayedT * 2.0 + sin(atan(p.y, p.x) * 6.0 + delayedT));\n    float mask = exp(-abs(rings) * 4.5);\n    vec3 col = (0.5 + 0.5 * cos(delayedT * 0.6 + vec3(0.0, 2.1, 4.2))) * mask * smoothstep(1.1, 0.05, r);\n    col = aces(col * 1.2);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "48",
+    "slug": "trinitron-crt-phosphor-synth",
+    "title": "TRINITRON-PVM // Analog CRT Mask & Halation",
+    "category": "TOP: Feedback & Post-FX",
+    "category_ru": "TOP: Feedback-Системы и Пост-FX",
+    "price": 69,
+    "tech": [
+      "rampTOP Scanlines",
+      "channelmixTOP",
+      "blurTOP Halation",
+      "levelTOP"
+    ],
+    "desc_ru": "Эмуляция студийного ЭЛТ-монитора Sony PVM Trinitron с апертурной решёткой, сведением лучей и свечением люминофора.",
+    "script_filename": "project_48.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    // Curved CRT barrel distortion\n    vec2 p = uv * (1.0 + 0.18 * dot(uv, uv));\n    vec3 col = vec3(0.005, 0.008, 0.014);\n    if (max(abs(p.x * 0.58), abs(p.y)) < 0.48) {\n        float w1 = sin(p.x * 12.0 + t * 2.5 + m.x * 3.0) * 0.18;\n        float w2 = cos(p.x * 8.0 - t * 1.8 + m.y * 3.0) * 0.18;\n        float beam1 = exp(-abs(p.y - w1) * 32.0);\n        float beam2 = exp(-abs(p.y - w2) * 32.0);\n        col += vec3(0.15, 0.9, 1.0) * beam1 * 1.3 + vec3(1.0, 0.35, 0.55) * beam2 * 1.3;\n        // Scanline & aperture grille modulation\n        float scanline = 0.72 + 0.28 * sin(gl_FragCoord.y * 1.8);\n        col *= scanline;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "49",
+    "slug": "spring-chop-pendulum-wave",
+    "title": "SPRING-CHOP // 64 Coupled Pendulum Array",
+    "category": "CHOP: Signals & Motion",
+    "category_ru": "CHOP: Сигналы и Кинетика",
+    "price": 75,
+    "tech": [
+      "patternCHOP",
+      "springCHOP",
+      "mathCHOP",
+      "choptoTOP"
+    ],
+    "desc_ru": "Массив из 64 связанных гармонических маятников с пружинной физикой springCHOP и фазовыми волнами.",
+    "script_filename": "project_49.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    for (int i = 0; i < 48; i++) {\n        float fi = float(i) / 47.0;\n        float x = (fi - 0.5) * 1.35;\n        float freq = 1.0 + float(i) * 0.045;\n        float y = sin(t * freq + m.x * 2.0) * 0.32 * cos(fi * 3.14159 - m.y);\n        vec2 pt = vec2(x, y);\n        float d = length(uv - pt);\n        float stem = max(abs(uv.x - x), max(0.0, abs(uv.y - y * 0.5) - abs(y * 0.5)));\n        vec3 c = mix(vec3(0.12, 0.85, 1.0), vec3(1.0, 0.55, 0.18), fi);\n        col += c * (0.00018 / (d * d + 0.00012));\n        col += c * exp(-stem * 180.0) * 0.12;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "50",
+    "slug": "fm-synthesis-bessel-matrix",
+    "title": "FM-BESSEL // Frequency Modulation Spectrogram",
+    "category": "CHOP: Signals & Motion",
+    "category_ru": "CHOP: Сигналы и Кинетика",
+    "price": 79,
+    "tech": [
+      "waveCHOP",
+      "mathCHOP FM",
+      "trailCHOP",
+      "choptoTOP"
+    ],
+    "desc_ru": "Частотная модуляция (FM-синтез) сигналов в CHOP: боковые гармоники Бесселя, развёрнутые в 3D-спектрограмму.",
+    "script_filename": "project_50.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    float modIdx = 2.8 + 1.8 * sin(t * 0.5) + m.x * 2.0;\n    for (int row = 0; row < 18; row++) {\n        float fr = float(row) / 17.0;\n        float yBase = (fr - 0.5) * 0.72;\n        float carrier = sin(uv.x * 14.0 + fr * 4.0 - t * 2.0 + modIdx * sin(uv.x * 6.0 * (1.0 + fr) - t * 1.3));\n        float d = abs(uv.y - (yBase + carrier * 0.045));\n        float glow = 0.0008 / (0.0015 + d * d * 85.0);\n        col += mix(vec3(0.15, 0.88, 0.95), vec3(1.0, 0.35, 0.65), fr) * glow * smoothstep(0.85, 0.2, abs(uv.x));\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "51",
+    "slug": "fourier-epicycle-phasors",
+    "title": "FOURIER-PHI // Epicycle Harmonic Phasors",
+    "category": "CHOP: Signals & Motion",
+    "category_ru": "CHOP: Сигналы и Кинетика",
+    "price": 79,
+    "tech": [
+      "waveCHOP",
+      "mathCHOP",
+      "limitSOP",
+      "lineMAT"
+    ],
+    "desc_ru": "Вращающиеся эпициклы ряда Фурье, вычерчивающие замкнутые гармонические орбиты в комплексной плоскости.",
+    "script_filename": "project_51.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    vec2 center = vec2(0.0);\n    float radii[5] = float[5](0.22, 0.11, 0.065, 0.038, 0.022);\n    float freqs[5] = float[5](1.0, -3.0, 5.0, -7.0, 9.0);\n    for (int i = 0; i < 5; i++) {\n        float r = radii[i];\n        float dCirc = abs(length(uv - center) - r);\n        col += vec3(0.2, 0.55, 0.85) * exp(-dCirc * 180.0) * 0.35;\n        float a = t * freqs[i] * 0.55 + m.x * float(i + 1);\n        vec2 nextC = center + r * vec2(cos(a), sin(a));\n        center = nextC;\n    }\n    // Trace the closed Fourier spirograph curve\n    for (int s = 0; s < 160; s++) {\n        float ts = float(s) / 160.0 * 6.283185;\n        vec2 pt = vec2(0.0);\n        for (int i = 0; i < 5; i++) {\n            float a = ts * freqs[i] + m.x * float(i + 1);\n            pt += radii[i] * vec2(cos(a), sin(a));\n        }\n        float d = length(uv - pt);\n        col += vec3(1.0, 0.65, 0.2) * (0.00012 / (d * d + 0.00012));\n    }\n    col += vec3(0.5, 0.95, 1.0) * (0.0006 / (dot(uv - center, uv - center) + 0.0002));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "52",
+    "slug": "quantized-cv-step-sequencer",
+    "title": "MODULAR-CV // Step-Quantized CHOP Matrix",
+    "category": "CHOP: Signals & Motion",
+    "category_ru": "CHOP: Сигналы и Кинетика",
+    "price": 65,
+    "tech": [
+      "noiseCHOP",
+      "limitCHOP Quantize",
+      "choptoTOP",
+      "levelTOP"
+    ],
+    "desc_ru": "Модульный секвенсор управляющих напряжений (CV/Gate): квантованные по шагам каналы CHOP в матричной развёртке.",
+    "script_filename": "project_52.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 g = uv * vec2(16.0, 12.0);\n    vec2 id = floor(g);\n    vec2 f = fract(g) - 0.5;\n    float stepT = floor(t * 6.0);\n    float rnd = hash21(id + vec2(stepT * 0.15, 0.0));\n    float active = step(0.62, hash21(vec2(id.x + stepT, id.y)));\n    float playhead = exp(-abs(id.x - mod(stepT, 16.0) + 8.0) * 1.5);\n    float pad = smoothstep(0.42, 0.36, max(abs(f.x), abs(f.y)));\n    vec3 c = mix(vec3(0.08, 0.78, 1.0), vec3(1.0, 0.42, 0.15), playhead);\n    vec3 col = vec3(0.006, 0.008, 0.014) + c * pad * (0.08 + 0.92 * active * (0.5 + 0.5 * playhead));\n    col *= smoothstep(1.15, 0.2, length(uv));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "53",
+    "slug": "spectrum-chop-equalizer-3d",
+    "title": "SPECTRUM-32 // Logarithmic FFT Peak Analyzer",
+    "category": "CHOP: Signals & Motion",
+    "category_ru": "CHOP: Сигналы и Кинетика",
+    "price": 69,
+    "tech": [
+      "audiodeviceinCHOP",
+      "spectrumCHOP",
+      "lagCHOP",
+      "choptoTOP"
+    ],
+    "desc_ru": "32-полосный логарифмический анализатор спектра с инерционным удержанием пиков (Peak-Hold lagCHOP).",
+    "script_filename": "project_53.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    float bx = uv.x * 18.0;\n    float bid = floor(bx);\n    float bf = fract(bx) - 0.5;\n    if (abs(bid) <= 14.0) {\n        float normB = (bid + 14.0) / 28.0;\n        float amp = (0.15 + 0.65 * fbm(vec2(bid * 0.35, t * 1.8))) * exp(-abs(normB - 0.35 - m.x * 0.2) * 2.2);\n        float peak = amp + 0.08 * (0.5 + 0.5 * sin(t * 3.0 + bid));\n        float barMask = smoothstep(0.38, 0.32, abs(bf)) * step(-0.38, uv.y) * step(uv.y, -0.38 + amp);\n        float seg = step(0.25, fract((uv.y + 0.38) * 28.0));\n        float peakMask = smoothstep(0.38, 0.32, abs(bf)) * smoothstep(0.012, 0.002, abs(uv.y - (-0.38 + peak)));\n        vec3 bCol = mix(vec3(0.1, 0.88, 0.95), vec3(1.0, 0.35, 0.55), clamp((uv.y + 0.38) * 1.4, 0.0, 1.0));\n        col += bCol * barMask * seg * 1.15 + vec3(1.0, 0.85, 0.4) * peakMask * 1.4;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "54",
+    "slug": "chaotic-chop-feedback-ribbons",
+    "title": "CHOP-CHAOS // Recursive Signal Ribbon Synth",
+    "category": "CHOP: Signals & Motion",
+    "category_ru": "CHOP: Сигналы и Кинетика",
+    "price": 75,
+    "tech": [
+      "waveCHOP",
+      "feedbackCHOP",
+      "mathCHOP",
+      "trailSOP"
+    ],
+    "desc_ru": "Генератор хаотических сигналов на обратной связи CHOP, управляющий многослойными неоновыми шлейфами.",
+    "script_filename": "project_54.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    for (int k = 0; k < 7; k++) {\n        float fk = float(k);\n        float y = 0.0;\n        float ph = fk * 0.85 + t * 0.9;\n        y += 0.18 * sin(uv.x * 4.5 + ph + m.x * 2.0);\n        y += 0.09 * cos(uv.x * 9.0 - ph * 1.4 + m.y * 2.0);\n        y += 0.04 * sin(uv.x * 18.0 + t * 2.5);\n        float d = abs(uv.y - y);\n        float glow = 0.0014 / (0.002 + d * d * 75.0);\n        vec3 c = 0.5 + 0.5 * cos(fk * 0.7 + uv.x * 2.0 + vec3(0.0, 2.1, 4.2));\n        col += c * glow * 0.65;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "55",
+    "slug": "linemat-tapered-architectural-splines",
+    "title": "LINEMAT-PRO // Depth-Cued Tapered Splines",
+    "category": "MAT: Shading & PBR Lighting",
+    "category_ru": "MAT: Шейдинг, PBR и Свет",
+    "price": 85,
+    "tech": [
+      "lineMAT Depth/Width",
+      "torusSOP",
+      "cameraCOMP",
+      "renderTOP"
+    ],
+    "desc_ru": "Фирменный шейдер линий TouchDesigner (lineMAT): переменная толщина штриха и градиент цвета по Z-глубине камеры.",
+    "script_filename": "project_55.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    for (int j = 0; j < 14; j++) {\n        float fj = float(j);\n        for (int i = 0; i < 60; i++) {\n            float s = float(i) / 60.0 * 6.28318;\n            vec3 p = vec3(\n                (0.28 + fj * 0.022) * cos(s + fj * 0.15) * (1.2 + 0.35 * cos(s * 3.0 + t)),\n                (0.28 + fj * 0.022) * sin(s + fj * 0.15) * (1.2 + 0.35 * cos(s * 3.0 + t)),\n                0.22 * sin(s * 3.0 + t + fj * 0.2)\n            );\n            p.xz *= rot(m.x * 1.5 + t * 0.2);\n            p.yz *= rot(m.y * 1.2 + 0.4);\n            vec2 proj = p.xy / (1.5 + p.z);\n            float d = length(uv - proj);\n            float taper = 0.5 + 0.5 * sin(s * 2.0 - t * 2.0);\n            vec3 c = mix(vec3(0.12, 0.88, 1.0), vec3(1.0, 0.45, 0.22), clamp(p.z * 2.0 + 0.5, 0.0, 1.0));\n            col += c * (0.000045 * taper / (d * d + 0.00008));\n        }\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "56",
+    "slug": "dichroic-thin-film-glass-sculpture",
+    "title": "DICHROIC // Thin-Film Interference Glass",
+    "category": "MAT: Shading & PBR Lighting",
+    "category_ru": "MAT: Шейдинг, PBR и Свет",
+    "price": 95,
+    "tech": [
+      "phongMAT Rim Lights",
+      "torusSOP",
+      "lightCOMP x3",
+      "renderTOP"
+    ],
+    "desc_ru": "Дихроичное стекло с тонкоплёночной интерференцией Френеля и тремя контровыми источниками света.",
+    "script_filename": "project_56.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.2);\n    vec3 rd = normalize(vec3(uv, 1.4));\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        p.yz *= rot(m.y * 1.4 + t * 0.25);\n        p.xz *= rot(m.x * 1.8 + t * 0.35);\n        float d = length(vec2(length(p.xz) - 0.85, p.y)) - 0.32 - 0.06 * sin(atan(p.z, p.x) * 4.0 + t);\n        if (d < 0.002) {\n            vec3 nor = normalize(p);\n            float ndv = abs(dot(nor, -rd));\n            float fres = pow(1.0 - ndv, 2.4);\n            vec3 film = 0.5 + 0.5 * cos(ndv * 9.0 + vec3(0.0, 2.1, 4.2) + t * 0.6);\n            col = film * (0.35 + 1.35 * fres);\n            break;\n        }\n        tot += max(d * 0.7, 0.015);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "57",
+    "slug": "pbr-gold-obsidian-totem",
+    "title": "OBSIDIAN-AU // PBR Gold & Obsidian Totem",
+    "category": "MAT: Shading & PBR Lighting",
+    "category_ru": "MAT: Шейдинг, PBR и Свет",
+    "price": 89,
+    "tech": [
+      "pbrMAT Metallic",
+      "sphereSOP",
+      "lightCOMP Studio",
+      "renderTOP"
+    ],
+    "desc_ru": "Контрастный PBR-тотем из полированного чёрного обсидиана и 24-каратного золота со студийными бликами.",
+    "script_filename": "project_57.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.3);\n    vec3 rd = normalize(vec3(uv, 1.45));\n    vec3 col = vec3(0.005, 0.006, 0.01);\n    float tot = 0.0;\n    for (int i = 0; i < 75; i++) {\n        vec3 p = ro + rd * tot;\n        p.xz *= rot(t * 0.3 + m.x * 1.8);\n        p.yz *= rot(m.y * 0.8);\n        float rings = sin(p.y * 16.0 + sin(atan(p.z, p.x) * 4.0));\n        float d = length(p) - 0.95 - 0.04 * rings;\n        if (d < 0.002) {\n            vec3 nor = normalize(p + vec3(0.0, cos(p.y * 16.0) * 0.25, 0.0));\n            vec3 ref = reflect(rd, nor);\n            float spec = pow(max(dot(ref, normalize(vec3(1.0, 1.2, -1.0))), 0.0), 36.0);\n            float goldMask = smoothstep(0.2, 0.6, rings);\n            vec3 albedo = mix(vec3(0.02, 0.025, 0.035), vec3(1.0, 0.72, 0.24), goldMask);\n            col = albedo * (0.25 + 1.6 * spec) + vec3(1.0, 0.85, 0.55) * spec * goldMask;\n            break;\n        }\n        tot += max(d * 0.7, 0.015);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "58",
+    "slug": "cad-blueprint-cel-wireframe",
+    "title": "BLUEPRINT-CAD // Technical Isometric Shader",
+    "category": "MAT: Shading & PBR Lighting",
+    "category_ru": "MAT: Шейдинг, PBR и Свет",
+    "price": 69,
+    "tech": [
+      "wireframeMAT",
+      "phongMAT Cel",
+      "torusSOP",
+      "renderTOP"
+    ],
+    "desc_ru": "Инженерный изометрический CAD-чертёж с квантованным cel-шейдингом, осевыми линиями и координатной сеткой.",
+    "script_filename": "project_58.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.008, 0.022, 0.048);\n    vec2 bgGrid = abs(fract(uv * 12.0) - 0.5);\n    col += vec3(0.05, 0.18, 0.35) * smoothstep(0.02, 0.0, min(bgGrid.x, bgGrid.y));\n\n    vec3 ro = vec3(0.0, 0.0, -3.4);\n    vec3 rd = normalize(vec3(uv, 1.45));\n    float tot = 0.0;\n    for (int i = 0; i < 68; i++) {\n        vec3 p = ro + rd * tot;\n        p.yz *= rot(0.55 + m.y);\n        p.xz *= rot(t * 0.25 + m.x);\n        float d = length(vec2(length(p.xz) - 0.82, p.y)) - 0.32;\n        if (d < 0.002) {\n            vec3 n = normalize(p);\n            float cel = floor(max(dot(n, normalize(vec3(1,2,-1))), 0.1) * 4.0) / 4.0;\n            float wire = min(abs(sin(atan(p.z, p.x) * 12.0)), abs(sin(p.y * 28.0)));\n            float wLine = smoothstep(0.12, 0.0, wire);\n            col = mix(vec3(0.04, 0.18, 0.38) * (0.4 + cel), vec3(0.35, 0.92, 1.0), wLine);\n            break;\n        }\n        tot += max(d * 0.75, 0.015);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.1);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "59",
+    "slug": "subsurface-imperial-jade-sculpture",
+    "title": "JADE-SSS // Subsurface Translucent Jade",
+    "category": "MAT: Shading & PBR Lighting",
+    "category_ru": "MAT: Шейдинг, PBR и Свет",
+    "price": 85,
+    "tech": [
+      "phongMAT SSS",
+      "superquadSOP",
+      "lightCOMP Backlight",
+      "renderTOP"
+    ],
+    "desc_ru": "Полупрозрачный императорский нефрит с глубоким подповерхностным рассеянием (Subsurface Scattering) контрового света.",
+    "script_filename": "project_59.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.3);\n    vec3 rd = normalize(vec3(uv, 1.45));\n    vec3 col = vec3(0.004, 0.008, 0.007);\n    float tot = 0.0;\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        p.yz *= rot(m.y * 1.2 + 0.3);\n        p.xz *= rot(m.x * 1.6 + t * 0.25);\n        float a = atan(p.z, p.x);\n        vec2 q = vec2(length(p.xz) - 0.78, p.y);\n        q *= rot(a * 1.5 + t * 0.3);\n        float d = length(q) - 0.32 - 0.06 * cos(a * 6.0);\n        if (d < 0.002) {\n            vec3 n = normalize(p);\n            float diff = max(dot(n, normalize(vec3(1,1,-1))), 0.0);\n            float sss = pow(clamp(dot(rd, normalize(vec3(-0.5, 0.5, 1.0))) + 0.65, 0.0, 1.0), 2.2);\n            float spec = pow(max(dot(reflect(rd, n), normalize(vec3(1,1,-1))), 0.0), 40.0);\n            col = vec3(0.04, 0.42, 0.28) * (0.25 + 0.75 * diff) + vec3(0.18, 0.95, 0.62) * sss * 0.65 + vec3(0.8, 1.0, 0.9) * spec * 0.6;\n            break;\n        }\n        tot += max(d * 0.7, 0.015);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "60",
+    "slug": "hologram-glitch-wireframe-mesh",
+    "title": "HOLO-GLITCH // Volumetric Hologram Mesh",
+    "category": "MAT: Shading & PBR Lighting",
+    "category_ru": "MAT: Шейдинг, PBR и Свет",
+    "price": 79,
+    "tech": [
+      "wireframeMAT",
+      "pointMAT",
+      "noiseSOP Glitch",
+      "renderTOP"
+    ],
+    "desc_ru": "Голографическая 3D-проекция со сканлайнами, фазовым глитчем вершин и двойным рендером (wireframeMAT + pointMAT).",
+    "script_filename": "project_60.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.3);\n    vec3 rd = normalize(vec3(uv, 1.4));\n    vec3 col = vec3(0.003, 0.007, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 68; i++) {\n        vec3 p = ro + rd * tot;\n        float glitch = step(0.88, sin(floor(p.y * 12.0) * 7.3 + floor(t * 8.0))) * 0.14;\n        p.x += glitch;\n        p.xz *= rot(t * 0.35 + m.x * 1.8);\n        p.yz *= rot(m.y * 1.2);\n        float d = abs(length(p) - 1.05) - 0.02;\n        float scan = 0.55 + 0.45 * sin(p.y * 45.0 - t * 6.0);\n        float glow = 0.0014 / (0.012 + d * d * 48.0);\n        col += mix(vec3(0.1, 0.88, 1.0), vec3(1.0, 0.25, 0.55), abs(glitch) * 6.0) * glow * scan;\n        tot += max(d * 0.65, 0.02);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "61",
+    "slug": "scriptsop-enneper-minimal-surface",
+    "title": "ENNEPER-SOP // Differential Minimal Surface",
+    "category": "COMP/DAT: Physics & Scripting",
+    "category_ru": "COMP/DAT: Физика, Скрипты и UI",
+    "price": 95,
+    "tech": [
+      "scriptSOP Python",
+      "wireframeMAT",
+      "phongMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Дифференциальная геометрия в Python (scriptSOP): минимальная поверхность Эннепера с нулевой средней кривизной.",
+    "script_filename": "project_61.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.5);\n    ro.yz *= rot(m.y * 1.4 + 0.35);\n    ro.xz *= rot(m.x * 1.8 + t * 0.22);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    float tot = 0.0;\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        // Saddle minimal surface z = (x^2 - y^2) modulated by harmonic order\n        float r = length(p);\n        float saddle = p.z - 0.65 * (p.x * p.x - p.y * p.y) * cos(t * 0.4);\n        float d = max(abs(saddle) * 0.55, r - 1.35);\n        float grid = min(abs(sin(p.x * 14.0)), abs(sin(p.y * 14.0)));\n        if (d < 0.004) {\n            float line = smoothstep(0.15, 0.0, grid);\n            col = mix(vec3(0.08, 0.22, 0.38), vec3(0.2, 0.9, 1.0), line) * smoothstep(1.4, 0.2, r);\n            break;\n        }\n        tot += max(d * 0.65, 0.018);\n        if (tot > 6.0) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "62",
+    "slug": "n-body-lagrange-choreography",
+    "title": "LAGRANGE-N6 // N-Body Orbital Choreography",
+    "category": "COMP/DAT: Physics & Scripting",
+    "category_ru": "COMP/DAT: Физика, Скрипты и UI",
+    "price": 89,
+    "tech": [
+      "Orbital Physics Solver",
+      "trailSOP",
+      "lineMAT",
+      "renderTOP"
+    ],
+    "desc_ru": "Гравитационная хореография задачи N тел (орбита-восьмёрка Кристиана Мура и точки Лагранжа) со световыми треками.",
+    "script_filename": "project_62.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    for (int b = 0; b < 3; b++) {\n        float fb = float(b) * 2.094395; // 2*pi/3 phase offset on figure-8 choreography\n        vec3 bodyCol = (b == 0) ? vec3(0.15, 0.88, 1.0) : ((b == 1) ? vec3(1.0, 0.55, 0.18) : vec3(0.95, 0.28, 0.65));\n        for (int s = 0; s < 75; s++) {\n            float fs = float(s) / 75.0;\n            float tau = t * 1.4 + fb - fs * 1.25;\n            vec2 pos = vec2(sin(tau) * 0.46, sin(2.0 * tau) * 0.22) * rot(m.x * 0.8);\n            float d = length(uv - pos);\n            float head = (s == 0) ? 3.5 : (1.0 - fs) * 0.55;\n            col += bodyCol * (0.00014 * head / (d * d + 0.00011));\n        }\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "63",
+    "slug": "voronoi-crystalline-fracture",
+    "title": "FRACTURE-SOP // Levitating Polyhedral Shards",
+    "category": "COMP/DAT: Physics & Scripting",
+    "category_ru": "COMP/DAT: Физика, Скрипты и UI",
+    "price": 85,
+    "tech": [
+      "sphereSOP",
+      "facetSOP Unique Points",
+      "noiseSOP",
+      "renderTOP"
+    ],
+    "desc_ru": "Левитирующие осколки расколотого кристалла (facetSOP + уникальные нормали граней), пульсирующие от курсора.",
+    "script_filename": "project_63.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 ro = vec3(0.0, 0.0, -3.4);\n    ro.yz *= rot(m.y * 1.4);\n    ro.xz *= rot(m.x * 1.8 + t * 0.22);\n    vec3 ww = normalize(-ro), uu = normalize(cross(ww, vec3(0,1,0))), vv = cross(uu, ww);\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.4 * ww);\n\n    vec3 col = vec3(0.004, 0.006, 0.014);\n    float tot = 0.0;\n    float expAmt = 0.18 + 0.14 * (0.5 + 0.5 * sin(t * 1.4));\n    for (int i = 0; i < 72; i++) {\n        vec3 p = ro + rd * tot;\n        vec3 dir = normalize(p + 1e-4);\n        vec3 shardId = floor(dir * 4.0);\n        float rnd = hash21(shardId.xy + shardId.z);\n        float rTarget = 0.85 + expAmt * rnd;\n        float shell = abs(length(p) - rTarget) - 0.045;\n        vec3 f = abs(fract(dir * 4.0) - 0.5);\n        float gap = 0.06 - min(min(f.x, f.y), f.z);\n        float d = max(shell, gap);\n        if (d < 0.003) {\n            col = mix(vec3(0.12, 0.82, 1.0), vec3(1.0, 0.62, 0.2), rnd) * (1.0 - float(i)/72.0);\n            break;\n        }\n        // Glowing core visible through fracture gaps\n        col += vec3(1.0, 0.45, 0.15) * exp(-length(p) * 3.5) * 0.018;\n        tot += max(d * 0.65, 0.018);\n        if (tot > 5.5) break;\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "64",
+    "slug": "dat-telemetry-cyber-matrix",
+    "title": "DAT-TELEMETRY // Procedural Hex Data Stream",
+    "category": "COMP/DAT: Physics & Scripting",
+    "category_ru": "COMP/DAT: Физика, Скрипты и UI",
+    "price": 69,
+    "tech": [
+      "tableDAT",
+      "evaluateDAT",
+      "textTOP",
+      "feedbackTOP"
+    ],
+    "desc_ru": "Терминал телеметрии данных DAT/CHOP: потоковые шестнадцатеричные регистры, графики и радарные векторы.",
+    "script_filename": "project_64.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec2 g = uv * vec2(28.0, 18.0);\n    vec2 id = floor(g);\n    vec2 f = fract(g);\n    float colSeed = hash21(vec2(id.x, 0.0));\n    float fall = fract(id.y / 18.0 + t * (0.4 + colSeed * 0.8));\n    float trail = pow(1.0 - fall, 3.0);\n\n    // Procedural binary/hex glyph pattern inside each cell\n    vec2 sub = floor(f * 5.0);\n    float bit = step(0.48, hash21(id + sub + floor(t * 4.0 * colSeed)));\n    float border = step(1.0, sub.x) * step(sub.x, 3.0) * step(1.0, sub.y) * step(sub.y, 3.0);\n    float glyph = bit * border;\n\n    vec3 c = mix(vec3(0.05, 0.88, 0.68), vec3(0.65, 0.98, 1.0), step(0.92, trail));\n    vec3 col = vec3(0.003, 0.008, 0.01) + c * glyph * trail * 1.1;\n    col *= smoothstep(1.15, 0.2, length(uv));\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "65",
+    "slug": "replicator-astrolabe-mandala",
+    "title": "ASTROLABE // Replicator Precision Dial Engine",
+    "category": "COMP/DAT: Physics & Scripting",
+    "category_ru": "COMP/DAT: Физика, Скрипты и UI",
+    "price": 79,
+    "tech": [
+      "replicatorCOMP",
+      "circleTOP",
+      "transformTOP",
+      "compositeTOP"
+    ],
+    "desc_ru": "Прецизионная небесная астролябия на базе концентрических шкал с противофазным вращением колец.",
+    "script_filename": "project_65.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    float r = length(uv);\n    float a = atan(uv.y, uv.x);\n    vec3 col = vec3(0.004, 0.006, 0.012);\n    for (int i = 1; i <= 7; i++) {\n        float fi = float(i);\n        float rad = fi * 0.062;\n        float dir = (i % 2 == 0) ? 1.0 : -1.0;\n        float rotA = a + t * 0.25 * dir * (1.0 / fi) + m.x * dir;\n        float ring = exp(-abs(r - rad) * 220.0);\n        float ticks = smoothstep(0.7, 0.95, sin(rotA * (12.0 * fi))) * exp(-abs(r - rad) * 75.0);\n        float arcMask = step(-0.3, sin(rotA * 2.0 + fi));\n        vec3 rCol = mix(vec3(0.15, 0.85, 1.0), vec3(1.0, 0.68, 0.25), fi / 7.0);\n        col += rCol * (ring * arcMask * 0.85 + ticks * 0.95);\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  },
+  {
+    "id": "66",
+    "slug": "outrun-cyber-horizon-synth",
+    "title": "CYBERSCAPE-84 // Procedural Outrun Horizon",
+    "category": "COMP/DAT: Physics & Scripting",
+    "category_ru": "COMP/DAT: Физика, Скрипты и UI",
+    "price": 85,
+    "tech": [
+      "gridSOP",
+      "noiseSOP Ridge",
+      "lineMAT",
+      "rampTOP Sun"
+    ],
+    "desc_ru": "Интерактивный синтвейв-горизонт: процедурные полигональные хребты (gridSOP + noiseSOP + lineMAT) и закатное солнце со сканлайнами.",
+    "script_filename": "project_66.py",
+    "webgl_shader": "#version 300 es\nprecision highp float;\nuniform vec2 uResolution;\nuniform float uTime;\nuniform vec2 uMouse;\nuniform float uBreath;\nout vec4 fragColor;\n\nmat2 rot(float a) {\n    float s = sin(a), c = cos(a);\n    return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(234.34, 435.345));\n    p += dot(p, p + 34.23);\n    return fract(p.x * p.y);\n}\nfloat noise2(vec2 p) {\n    vec2 i = floor(p), f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x),\n               mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n    float v = 0.0, a = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += a * noise2(p);\n        p = rot(0.55) * p * 2.08;\n        a *= 0.5;\n    }\n    return v;\n}\nvec3 aces(vec3 x) {\n    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 res = uResolution;\n    vec2 uv = (gl_FragCoord.xy - 0.5 * res) / res.y;\n    float t = uTime;\n    vec2 m = uMouse;\n    float breath = uBreath;\n\n    vec3 col = mix(vec3(0.02, 0.005, 0.04), vec3(0.22, 0.02, 0.18), clamp(uv.y + 0.5, 0.0, 1.0));\n    // Retro sliced sun\n    vec2 sunUV = uv - vec2(m.x * 0.2, 0.14);\n    float dSun = length(sunUV);\n    if (dSun < 0.22) {\n        float slices = step(0.0, sin(sunUV.y * 95.0 - t * 2.0) + sunUV.y * 4.5 + 0.35);\n        vec3 sunCol = mix(vec3(1.0, 0.15, 0.55), vec3(1.0, 0.85, 0.2), clamp((sunUV.y + 0.22) / 0.44, 0.0, 1.0));\n        col = mix(col, sunCol, slices * smoothstep(0.22, 0.21, dSun));\n    }\n    // Perspective wireframe terrain below horizon\n    if (uv.y < -0.02) {\n        float z = 0.25 / abs(uv.y - 0.01);\n        float x = (uv.x - m.x * 0.3) * z;\n        float elev = pow(abs(x) * 0.35, 1.4) * fbm(vec2(x * 0.8, z * 0.8 + t * 2.2));\n        vec2 g = abs(fract(vec2(x, z + t * 2.2) * 1.5) - 0.5);\n        float wire = smoothstep(0.06, 0.0, min(g.x, g.y));\n        vec3 gridCol = mix(vec3(0.1, 0.9, 1.0), vec3(1.0, 0.2, 0.65), clamp(elev, 0.0, 1.0));\n        col = mix(col, gridCol, wire * exp(-z * 0.08));\n    }\n    col = aces(col * 1.15);\n\n    fragColor = vec4(col, 1.0);\n}\n"
+  }
+]

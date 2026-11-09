@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VOID.TD // SINGULARITY — Boutique Generative Systems Store for TouchDesigner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-obsidian: #050609;
+      --bg-panel: #090b10;
+      --bg-card: #0b0e15;
+      --bg-card-hover: #10141f;
+      --bg-glass: rgba(9, 11, 16, 0.78);
+      --line: rgba(255, 255, 255, 0.08);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --text-main: #f3f5f8;
+      --text-muted: #8a93a6;
+      --text-dim: #525b6e;
+      --accent-cyan: #38bdf8;
+      --accent-amber: #f59e0b;
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-display: 'Syne', 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--bg-obsidian);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg-obsidian);
+      background-image:
+        radial-gradient(circle at 18% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 85% 12%, rgba(245, 158, 11, 0.05) 0%, transparent 45%),
+        linear-gradient(to bottom, rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(to right, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* TOP STICKY HEADER */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: 64px;
+      background: rgba(5, 6, 9, 0.86);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: radial-gradient(circle at 35% 35%, rgba(245, 158, 11, 0.35), rgba(5, 6, 9, 0.95) 70%);
+      box-shadow: 0 0 18px rgba(245, 158, 11, 0.25);
+    }
+
+    .brand-mark::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #050609;
+      border: 1.5px solid #f59e0b;
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .brand-sub {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      padding-left: 12px;
+      border-left: 1px solid var(--line);
+    }
+
+    .topbar-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-input {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--line);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 8px 14px 8px 32px;
+      border-radius: 6px;
+      width: 250px;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-cyan);
+      width: 300px;
+      background: rgba(56, 189, 248, 0.04);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 11px;
+      color: var(--text-muted);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .td-bridge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 13px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.025);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .td-bridge-pill:hover {
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .td-bridge-pill.online {
+      border-color: rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.08);
+      color: #6ee7b7;
+    }
+
+    .td-bridge-pill.offline {
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.07);
+      color: #fcd34d;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .td-bridge-pill.online .status-dot {
+      background: var(--accent-emerald);
+      box-shadow: 0 0 10px var(--accent-emerald);
+      animation: pulseDot 2s infinite;
+    }
+
+    .td-bridge-pill.offline .status-dot {
+      background: var(--accent-amber);
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(1.25); }
+    }
+
+    /* MAIN CONTAINER */
+    .container {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 24px 28px 80px;
+    }
+
+    /* HERO STAGE: SPLIT WEBGL2 VIEWPORT + INSPECTOR DECK */
+    .hero-stage {
+      display: grid;
+      grid-template-columns: 1fr 430px;
+      border: 1px solid var(--line);
+      background: var(--bg-panel);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 32px;
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.65);
+    }
+
+    .viewport-wrap {
+      position: relative;
+      min-height: 580px;
+      background: #020305;
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    #glCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+
+    #glCanvas:active {
+      cursor: grabbing;
+    }
+
+    .viewport-hud-top,
+    .viewport-hud-bottom {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      pointer-events: none;
+    }
+
+    .viewport-hud-top > *,
+    .viewport-hud-bottom > * {
+      pointer-events: auto;
+    }
+
+    .hud-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .hud-pill {
+      background: rgba(5, 6, 9, 0.76);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 6px 11px;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-main);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .hud-pill.accent {
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #7dd3fc;
+      background: rgba(8, 25, 38, 0.78);
+    }
+
+    .hud-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hud-btn {
+      background: rgba(5, 6, 9, 0.78);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 6px 11px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .hud-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    .hud-telemetry {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.65);
+      background: rgba(5, 6, 9, 0.72);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 12px;
+      border-radius: 5px;
+      display: flex;
+      gap: 14px;
+    }
+
+    /* RIGHT INSPECTOR PANEL */
+    .inspector-deck {
+      padding: 28px 26px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: linear-gradient(180deg, rgba(13, 17, 26, 0.9) 0%, rgba(7, 9, 14, 0.98) 100%);
+    }
+
+    .inspector-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .inspector-id {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent-cyan);
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .inspector-cat {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .inspector-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 14px;
+      color: #ffffff;
+    }
+
+    .inspector-desc {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .spec-box {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 0;
+      margin-bottom: 20px;
+    }
+
+    .spec-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+    }
+
+    .tech-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tech-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 4px 9px;
+      border-radius: 4px;
+    }
+
+    .price-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .price-value {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .price-meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-emerald);
+    }
+
+    .cta-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn-primary-td {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 7px;
+      border: 1px solid rgba(56, 189, 248, 0.55);
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.22) 0%, rgba(16, 185, 129, 0.18) 100%);
+      color: #f8fafc;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.14);
+    }
+
+    .btn-primary-td:hover {
+      border-color: #38bdf8;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.36) 0%, rgba(16, 185, 129, 0.28) 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 30px rgba(56, 189, 248, 0.25);
+    }
+
+    .btn-secondary-buy {
+      width: 100%;
+      padding: 13px 18px;
+      border-radius: 7px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.05);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.18s ease;
+    }
+
+    .btn-secondary-buy:hover {
+      background: #ffffff;
+      color: #050609;
+      border-color: #ffffff;
+    }
+
+    /* FILTER BAR */
+    .catalog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 22px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .filter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-btn {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid var(--line);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .filter-btn:hover {
+      color: var(--text-main);
+      border-color: var(--line-strong);
+    }
+
+    .filter-btn.active {
+      background: var(--text-main);
+      color: var(--bg-obsidian);
+      border-color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .catalog-stats {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* 30-PROJECT GRID */
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    .project-card {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .project-card:hover {
+      border-color: rgba(255, 255, 255, 0.22);
+      background: var(--bg-card-hover);
+      transform: translateY(-3px);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55);
+    }
+
+    .project-card.active-webgl {
+      border-color: rgba(56, 189, 248, 0.65);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25), 0 18px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .project-card.active-td {
+      border-color: rgba(16, 185, 129, 0.7);
+    }
+
+    .card-thumb-wrap {
+      position: relative;
+      aspect-ratio: 16 / 10;
+      background: #040508;
+      overflow: hidden;
+      cursor: pointer;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .card-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .project-card:hover .card-thumb {
+      transform: scale(1.045);
+    }
+
+    .card-thumb-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(5, 6, 9, 0.88) 0%, transparent 45%, rgba(5, 6, 9, 0.45) 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 12px 14px;
+    }
+
+    .card-top-badges {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-id {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(5, 6, 9, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+    }
+
+    .badge-cat {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(5, 6, 9, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+    }
+
+    .badge-live-state {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.55);
+      color: #6ee7b7;
+    }
+
+    .card-body {
+      padding: 18px 18px 16px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .card-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-size: 16.5px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.3;
+    }
+
+    .card-price {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      flex: 1;
+    }
+
+    .card-tech-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 16px;
+    }
+
+    .card-tech-pill {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 3px 7px;
+      border-radius: 3px;
+    }
+
+    .card-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr 0.9fr;
+      gap: 7px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .card-btn {
+      padding: 9px 8px;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-main);
+      transition: all 0.16s ease;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .card-btn:hover {
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .card-btn.btn-webgl:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    .card-btn.btn-td {
+      border-color: rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.08);
+      color: #6ee7b7;
+    }
+
+    .card-btn.btn-td:hover {
+      border-color: var(--accent-emerald);
+      background: rgba(16, 185, 129, 0.2);
+      color: #ffffff;
+    }
+
+    .card-btn.btn-buy:hover {
+      background: #ffffff;
+      color: #050609;
+      border-color: #ffffff;
+    }
+
+    /* CHECKOUT / DOWNLOAD MODAL */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(3, 4, 7, 0.82);
+      backdrop-filter: blur(14px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 620px;
+      background: #090c12;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      padding: 28px;
+      box-shadow: 0 32px 90px rgba(0, 0, 0, 0.85);
+    }
+
+    .modal-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-close {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+    }
+
+    .modal-close:hover {
+      color: #fff;
+      border-color: #fff;
+    }
+
+    .code-snippet {
+      background: #040508;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: #7dd3fc;
+      overflow-x: auto;
+      margin: 10px 0 18px;
+      white-space: nowrap;
+    }
+
+    /* TOAST NOTIFICATION */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: rgba(9, 12, 18, 0.94);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      color: #f8fafc;
+      padding: 13px 18px;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideInToast 0.22s ease forwards;
+    }
+
+    @keyframes slideInToast {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 1120px) {
+      .hero-stage {
+        grid-template-columns: 1fr;
+      }
+      .viewport-wrap {
+        min-height: 440px;
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        padding: 0 16px;
+      }
+      .brand-sub {
+        display: none;
+      }
+      .search-input {
+        width: 150px;
+      }
+      .container {
+        padding: 16px 16px 60px;
+      }
+      .catalog-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- STICKY TOPBAR -->
+  <header class="topbar">
+    <a href="#" class="brand">
+      <div class="brand-mark"></div>
+      <span class="brand-title">VOID.TD // SINGULARITY</span>
+      <span class="brand-sub">66 ГЕНЕРАТИВНЫХ СИСТЕМ ДЛЯ TOUCHDESIGNER</span>
+    </a>
+
+    <div class="topbar-controls">
+      <div class="search-box">
+        <span class="search-icon">⌕</span>
+        <input type="text" id="searchInput" class="search-input" placeholder="Поиск: Black Hole, Lorenz, GLSL..." />
+      </div>
+
+      <div id="tdBridgeBadge" class="td-bridge-pill offline" onclick="checkTdBridge(true)" title="Нажмите для проверки связи с TouchDesigner (порт 9980)">
+        <span class="status-dot"></span>
+        <span id="tdBridgeText">TD BRIDGE: ПРОВЕРКА :9980...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- INTERACTIVE WEBGL2 HERO STAGE -->
+    <section class="hero-stage" id="heroStage">
+      <div class="viewport-wrap" id="viewportWrap">
+        <canvas id="glCanvas"></canvas>
+
+        <div class="viewport-hud-top">
+          <div class="hud-badge-group">
+            <span class="hud-pill accent" id="hudActiveBadge">LIVE WEBGL2 // #01</span>
+            <span class="hud-pill" id="hudCategoryBadge">Астрофизика и Оптика</span>
+            <span class="hud-pill" id="hudShaderStatus">GLSL 300 ES • 60 FPS</span>
+          </div>
+
+          <div class="hud-controls">
+            <button class="hud-btn" onclick="stepProject(-1)" title="Предыдущий проект">← Пред.</button>
+            <button class="hud-btn" onclick="stepProject(1)" title="Следующий проект">След. →</button>
+            <button class="hud-btn" onclick="toggleFullscreen()" title="Полный экран">⛶ Полный экран</button>
+          </div>
+        </div>
+
+        <div class="viewport-hud-bottom">
+          <div class="hud-telemetry">
+            <span id="hudFps">FPS: 60</span>
+            <span id="hudMouse">ORBIT: +0.00, +0.00</span>
+            <span id="hudRes">RES: 1280×720</span>
+          </div>
+          <div class="hud-pill" style="color: var(--text-muted);">
+            Двигайте курсор по сцене для 3D-орбиты и гравитационного линзирования
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT INSPECTOR & LIVE TD LOADER -->
+      <aside class="inspector-deck">
+        <div>
+          <div class="inspector-header">
+            <span class="inspector-id" id="inspId">SYSTEM #01 / 66</span>
+            <span class="inspector-cat" id="inspCat">Астрофизика и Оптика</span>
+          </div>
+
+          <h1 class="inspector-title" id="inspTitle">GARGANTUA // Relativistic Black Hole</h1>
+          <p class="inspector-desc" id="inspDesc">
+            Релятивистская чёрная дыра с честным гравитационным линзированием Шварцшильда, эффектом Доплера на аккреционном диске, фотонным кольцом и полярными джетами.
+          </p>
+
+          <div class="spec-box">
+            <div class="spec-label">АРХИТЕКТУРА ПАТЧА TOUCHDESIGNER</div>
+            <div class="tech-tags" id="inspTech"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="price-row">
+            <div>
+              <div class="spec-label" style="margin-bottom: 4px;">ЛИЦЕНЗИЯ + ИСХОДНЫЙ КОД (.PY / GLSL)</div>
+              <div class="price-value" id="inspPrice">$89</div>
+            </div>
+            <div class="price-meta">✓ Готово для TD 2023–2025</div>
+          </div>
+
+          <div class="cta-stack">
+            <button class="btn-primary-td" id="heroLoadTdBtn" onclick="loadInTouchDesigner(currentProject.id)">
+              <span>⚡ Открыть в TouchDesigner (Live :9980)</span>
+            </button>
+            <button class="btn-secondary-buy" id="heroBuyBtn" onclick="openModal(currentProject.id)">
+              <span>↓ Купить / Скачать патч (.py)</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- FILTER PILLS & STATS -->
+    <section class="catalog-header">
+      <div class="filter-pills" id="filterPills"></div>
+      <div class="catalog-stats" id="catalogStats">Показано: 66 из 66 систем</div>
+    </section>
+
+    <!-- 30-PROJECT MINIMALIST CATALOG GRID -->
+    <section class="catalog-grid" id="catalogGrid"></section>
+  </main>
+
+  <!-- CHECKOUT & DOWNLOAD MODAL -->
+  <div class="modal-backdrop" id="checkoutModal" onclick="if(event.target===this) closeModal()">
+    <div class="modal-box">
+      <div class="modal-top">
+        <div>
+          <div class="inspector-id" id="modalId">SYSTEM #01</div>
+          <h3 style="font-family: var(--font-display); font-size: 20px; margin-top: 4px;" id="modalTitle">GARGANTUA</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+
+      <p style="font-size: 13.5px; color: var(--text-muted); line-height: 1.55; margin-bottom: 16px;" id="modalDesc"></p>
+
+      <div class="spec-label">СПОСОБ 1: МГНОВЕННАЯ ЗАГРУЗКА В ОТКРЫТЫЙ TOUCHDESIGNER (ПОРТ 9980)</div>
+      <button class="btn-primary-td" style="margin: 8px 0 18px;" id="modalLiveTdBtn">
+        ⚡ Собрать сеть в TouchDesigner прямо сейчас
+      </button>
+
+      <div class="spec-label">СПОСОБ 2: СКАЧАТЬ АВТОНОМНЫЙ ГЕНЕРАТОР ПАТЧА (.PY)</div>
+      <a id="modalDownloadLink" href="td_projects/project_01.py" download class="btn-secondary-buy" style="text-decoration: none; margin: 8px 0 18px;">
+        ↓ Скачать файл project_01.py
+      </a>
+
+      <div class="spec-label">КОМАНДА ДЛЯ TOUCHDESIGNER TEXTPORT (ALT+T):</div>
+      <div class="code-snippet" id="modalTextportCmd"></div>
+      <button class="hud-btn" style="width: 100%; padding: 10px;" onclick="copyTextportCommand()">
+        Скопировать команду для Textport
+      </button>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    const TD_BRIDGE_URL = 'http://127.0.0.1:9980';
+    let catalog = [];
+    let currentProject = null;
+    let activeCategory = 'ALL';
+    let searchQuery = '';
+    let tdActiveProjectId = null;
+    let tdBridgeOnline = false;
+
+    // WebGL2 State
+    let gl = null;
+    let currentProgram = null;
+    let vao = null;
+    let uResLoc = null, uTimeLoc = null, uMouseLoc = null, uBreathLoc = null;
+    let startTime = performance.now();
+    let targetMouse = { x: 0.0, y: 0.0 };
+    let smoothMouse = { x: 0.0, y: 0.0 };
+    let frameCount = 0;
+    let lastFpsTime = performance.now();
+
+    function showToast(msg, borderColor = 'rgba(56, 189, 248, 0.55)') {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.style.borderColor = borderColor;
+      el.innerHTML = `<span>${msg}</span>`;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.25s ease';
+        setTimeout(() => el.remove(), 260);
+      }, 3600);
+    }
+
+    // Initialize WebGL2 Hero Stage
+    function initWebGL() {
+      const canvas = document.getElementById('glCanvas');
+      gl = canvas.getContext('webgl2', { antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+      if (!gl) {
+        document.getElementById('hudShaderStatus').textContent = 'WEBGL2 UNSUPPORTED';
+        return;
+      }
+
+      vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1,  1, -1, -1,  1,
+        -1,  1,  1, -1,  1,  1
+      ]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      const wrap = document.getElementById('viewportWrap');
+      wrap.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const nx = ((e.clientX - rect.left) / rect.width) * 2.0 - 1.0;
+        const ny = (1.0 - (e.clientY - rect.top) / rect.height) * 2.0 - 1.0;
+        targetMouse.x = Math.max(-1, Math.min(1, nx));
+        targetMouse.y = Math.max(-1, Math.min(1, ny));
+      });
+
+      wrap.addEventListener('mouseleave', () => {
+        targetMouse.x = 0.0;
+        targetMouse.y = 0.0;
+      });
+
+      wrap.addEventListener('touchmove', (e) => {
+        if (e.touches.length > 0) {
+          const rect = canvas.getBoundingClientRect();
+          const nx = ((e.touches[0].clientX - rect.left) / rect.width) * 2.0 - 1.0;
+          const ny = (1.0 - (e.touches[0].clientY - rect.top) / rect.height) * 2.0 - 1.0;
+          targetMouse.x = Math.max(-1, Math.min(1, nx));
+          targetMouse.y = Math.max(-1, Math.min(1, ny));
+        }
+      }, { passive: true });
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    function compileProjectShader(fragSource) {
+      if (!gl) return false;
+      const vertSource = `#version 300 es
+        layout(location = 0) in vec2 aPos;
+        void main() {
+          gl_Position = vec4(aPos, 0.0, 1.0);
+        }
+      `;
+
+      const vs = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vs, vertSource);
+      gl.compileShader(vs);
+
+      const fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, fragSource);
+      gl.compileShader(fs);
+
+      if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+        console.error('Fragment shader error:', gl.getShaderInfoLog(fs));
+        document.getElementById('hudShaderStatus').textContent = 'GLSL COMPILE ERROR';
+        return false;
+      }
+
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs);
+      gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        console.error('Program link error:', gl.getProgramInfoLog(prog));
+        return false;
+      }
+
+      if (currentProgram) gl.deleteProgram(currentProgram);
+      currentProgram = prog;
+      uResLoc = gl.getUniformLocation(prog, 'uResolution');
+      uTimeLoc = gl.getUniformLocation(prog, 'uTime');
+      uMouseLoc = gl.getUniformLocation(prog, 'uMouse');
+      uBreathLoc = gl.getUniformLocation(prog, 'uBreath');
+      document.getElementById('hudShaderStatus').textContent = 'GLSL 300 ES • LIVE';
+      return true;
+    }
+
+    function renderLoop(now) {
+      requestAnimationFrame(renderLoop);
+      if (!gl || !currentProgram) return;
+
+      const canvas = document.getElementById('glCanvas');
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.65);
+      const displayW = Math.floor(canvas.clientWidth * dpr);
+      const displayH = Math.floor(canvas.clientHeight * dpr);
+
+      if (canvas.width !== displayW || canvas.height !== displayH) {
+        canvas.width = displayW;
+        canvas.height = displayH;
+        gl.viewport(0, 0, displayW, displayH);
+        document.getElementById('hudRes').textContent = `RES: ${displayW}×${displayH}`;
+      }
+
+      // Lag CHOP damping on mouse
+      smoothMouse.x += (targetMouse.x - smoothMouse.x) * 0.075;
+      smoothMouse.y += (targetMouse.y - smoothMouse.y) * 0.075;
+
+      const elapsed = (now - startTime) * 0.001;
+      const breath = Math.sin(elapsed * 1.45);
+
+      gl.useProgram(currentProgram);
+      gl.bindVertexArray(vao);
+      if (uResLoc) gl.uniform2f(uResLoc, canvas.width, canvas.height);
+      if (uTimeLoc) gl.uniform1f(uTimeLoc, elapsed);
+      if (uMouseLoc) gl.uniform2f(uMouseLoc, smoothMouse.x, smoothMouse.y);
+      if (uBreathLoc) gl.uniform1f(uBreathLoc, breath);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      frameCount++;
+      if (now - lastFpsTime >= 500) {
+        const fps = Math.round((frameCount * 1000) / (now - lastFpsTime));
+        document.getElementById('hudFps').textContent = `FPS: ${fps}`;
+        document.getElementById('hudMouse').textContent =
+          `ORBIT: ${smoothMouse.x >= 0 ? '+' : ''}${smoothMouse.x.toFixed(2)}, ${smoothMouse.y >= 0 ? '+' : ''}${smoothMouse.y.toFixed(2)}`;
+        frameCount = 0;
+        lastFpsTime = now;
+      }
+    }
+
+    function selectProjectForWebGL(id, scrollToTop = false) {
+      const proj = catalog.find(p => p.id === id);
+      if (!proj) return;
+      currentProject = proj;
+
+      compileProjectShader(proj.webgl_shader);
+
+      document.getElementById('hudActiveBadge').textContent = `LIVE WEBGL2 // #${proj.id}`;
+      document.getElementById('hudCategoryBadge').textContent = proj.category_ru;
+      document.getElementById('inspId').textContent = `SYSTEM #${proj.id} / ${catalog.length}`;
+      document.getElementById('inspCat').textContent = proj.category_ru;
+      document.getElementById('inspTitle').textContent = proj.title;
+      document.getElementById('inspDesc').textContent = proj.desc_ru;
+      document.getElementById('inspPrice').textContent = `$${proj.price}`;
+
+      const techWrap = document.getElementById('inspTech');
+      techWrap.innerHTML = proj.tech.map(t => `<span class="tech-tag">${t}</span>`).join('');
+
+      document.getElementById('heroLoadTdBtn').onclick = () => loadInTouchDesigner(proj.id);
+      document.getElementById('heroBuyBtn').onclick = () => openModal(proj.id);
+
+      highlightActiveCards();
+      if (scrollToTop) {
+        document.getElementById('heroStage').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function stepProject(delta) {
+      if (!catalog.length || !currentProject) return;
+      const idx = catalog.findIndex(p => p.id === currentProject.id);
+      const nextIdx = (idx + delta + catalog.length) % catalog.length;
+      selectProjectForWebGL(catalog[nextIdx].id, false);
+    }
+
+    function toggleFullscreen() {
+      const wrap = document.getElementById('viewportWrap');
+      if (!document.fullscreenElement) {
+        wrap.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    // TouchDesigner Live Bridge (:9980)
+    async function checkTdBridge(showFeedback = false) {
+      const badge = document.getElementById('tdBridgeBadge');
+      const text = document.getElementById('tdBridgeText');
+      try {
+        const res = await fetch(`${TD_BRIDGE_URL}/status`, { mode: 'cors' });
+        const data = await res.json();
+        if (data && data.ok) {
+          tdBridgeOnline = true;
+          badge.className = 'td-bridge-pill online';
+          text.textContent = `TD BRIDGE: ONLINE :9980`;
+          if (showFeedback) {
+            showToast('✓ Связь с TouchDesigner активна (127.0.0.1:9980)', 'rgba(16, 185, 129, 0.65)');
+          }
+          return true;
+        }
+      } catch (err) {
+        tdBridgeOnline = false;
+        badge.className = 'td-bridge-pill offline';
+        text.textContent = `TD BRIDGE: LOCAL :9980`;
+        if (showFeedback) {
+          showToast('Для прямой связи с TouchDesigner откройте http://localhost:8080 или проверьте порт 9980', 'rgba(245, 158, 11, 0.65)');
+        }
+      }
+      return false;
+    }
+
+    async function loadInTouchDesigner(id) {
+      const proj = catalog.find(p => p.id === id);
+      if (!proj) return;
+
+      // Also preview in WebGL stage
+      selectProjectForWebGL(id, false);
+
+      showToast(`⚡ Отправка #${proj.id} «${proj.title}» в TouchDesigner...`, 'rgba(56, 189, 248, 0.55)');
+      try {
+        const res = await fetch(`${TD_BRIDGE_URL}/load?id=${proj.id}`, { mode: 'cors' });
+        const data = await res.json();
+        if (data && data.ok) {
+          tdActiveProjectId = proj.id;
+          tdBridgeOnline = true;
+          const badge = document.getElementById('tdBridgeBadge');
+          const text = document.getElementById('tdBridgeText');
+          badge.className = 'td-bridge-pill online';
+          text.textContent = `TD ACTIVE: #${proj.id} (:9980)`;
+          highlightActiveCards();
+          showToast(`✓ Загружено в TouchDesigner: #${proj.id} ${proj.title}`, 'rgba(16, 185, 129, 0.75)');
+        } else {
+          showToast(`Ошибка сборки в TD: ${(data && data.error) || 'неизвестная ошибка'}`, 'rgba(244, 63, 94, 0.75)');
+        }
+      } catch (err) {
+        showToast(`Не удалось достучаться до 127.0.0.1:9980. Скачайте .py патч или откройте http://localhost:8080`, 'rgba(245, 158, 11, 0.75)');
+      }
+    }
+
+    // Filter Pills & Grid Rendering
+    function renderFilters() {
+      const categories = ['ALL', ...new Set(catalog.map(p => p.category_ru))];
+      const wrap = document.getElementById('filterPills');
+      wrap.innerHTML = categories.map(cat => {
+        const count = cat === 'ALL' ? catalog.length : catalog.filter(p => p.category_ru === cat).length;
+        const label = cat === 'ALL' ? `Все системы (${count})` : `${cat} (${count})`;
+        const isActive = activeCategory === cat ? 'active' : '';
+        return `<button class="filter-btn ${isActive}" onclick="setCategory('${cat}')">${label}</button>`;
+      }).join('');
+    }
+
+    function setCategory(cat) {
+      activeCategory = cat;
+      renderFilters();
+      renderCatalogGrid();
+    }
+
+    function renderCatalogGrid() {
+      const grid = document.getElementById('catalogGrid');
+      const q = searchQuery.trim().toLowerCase();
+
+      const filtered = catalog.filter(p => {
+        const matchCat = activeCategory === 'ALL' || p.category_ru === activeCategory;
+        const matchSearch = !q ||
+          p.title.toLowerCase().includes(q) ||
+          p.desc_ru.toLowerCase().includes(q) ||
+          p.category_ru.toLowerCase().includes(q) ||
+          p.id.includes(q) ||
+          p.tech.some(t => t.toLowerCase().includes(q));
+        return matchCat && matchSearch;
+      });
+
+      document.getElementById('catalogStats').textContent = `Показано: ${filtered.length} из ${catalog.length} систем`;
+
+      grid.innerHTML = filtered.map(p => {
+        const isWebGL = currentProject && currentProject.id === p.id;
+        const isTD = tdActiveProjectId === p.id;
+        return `
+          <article class="project-card ${isWebGL ? 'active-webgl' : ''} ${isTD ? 'active-td' : ''}" id="card-${p.id}">
+            <div class="card-thumb-wrap" onclick="selectProjectForWebGL('${p.id}', true)">
+              <img class="card-thumb" src="thumbs/thumb_${p.id}.jpg" alt="${p.title}" loading="lazy" />
+              <div class="card-thumb-overlay">
+                <div class="card-top-badges">
+                  <span class="badge-id">#${p.id}</span>
+                  <span class="badge-cat">${p.category_ru}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  ${isTD ? '<span class="badge-live-state">● ОТКРЫТО В TOUCHDESIGNER</span>' : '<span></span>'}
+                  ${isWebGL ? '<span class="badge-id" style="border-color:var(--accent-cyan);color:var(--accent-cyan);">◉ В WEBGL СЦЕНЕ</span>' : ''}
+                </div>
+              </div>
+            </div>
+
+            <div class="card-body">
+              <div class="card-title-row">
+                <h2 class="card-title">${p.title}</h2>
+                <span class="card-price">$${p.price}</span>
+              </div>
+              <p class="card-desc">${p.desc_ru}</p>
+              <div class="card-tech-list">
+                ${p.tech.map(t => `<span class="card-tech-pill">${t}</span>`).join('')}
+              </div>
+              <div class="card-actions">
+                <button class="card-btn btn-webgl" onclick="selectProjectForWebGL('${p.id}', true)">
+                  ◉ Live WebGL
+                </button>
+                <button class="card-btn btn-td" onclick="loadInTouchDesigner('${p.id}')">
+                  ⚡ → В TouchDesigner
+                </button>
+                <button class="card-btn btn-buy" onclick="openModal('${p.id}')">
+                  ↓ Купить / .py
+                </button>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function highlightActiveCards() {
+      renderCatalogGrid();
+    }
+
+    // Modal logic
+    let modalProject = null;
+    function openModal(id) {
+      const proj = catalog.find(p => p.id === id);
+      if (!proj) return;
+      modalProject = proj;
+      document.getElementById('modalId').textContent = `SYSTEM #${proj.id} // ${proj.category_ru.toUpperCase()} — $${proj.price}`;
+      document.getElementById('modalTitle').textContent = proj.title;
+      document.getElementById('modalDesc').textContent = proj.desc_ru;
+      const dl = document.getElementById('modalDownloadLink');
+      dl.href = `td_projects/${proj.script_filename}`;
+      dl.setAttribute('download', proj.script_filename);
+      dl.textContent = `↓ Скачать генератор патча ${proj.script_filename} ($${proj.price} Included)`;
+
+      document.getElementById('modalLiveTdBtn').onclick = () => {
+        loadInTouchDesigner(proj.id);
+        closeModal();
+      };
+
+      const cmd = `exec(open(r'C:\\Users\\hvoha\\WORK\\Antigravity\\web_store\\td_projects\\${proj.script_filename}', encoding='utf-8').read())`;
+      document.getElementById('modalTextportCmd').textContent = cmd;
+      document.getElementById('checkoutModal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('checkoutModal').classList.remove('open');
+    }
+
+    function copyTextportCommand() {
+      const cmd = document.getElementById('modalTextportCmd').textContent;
+      navigator.clipboard.writeText(cmd).then(() => {
+        showToast('✓ Команда скопирована! Вставьте её в TouchDesigner Textport (Alt+T)', 'rgba(16, 185, 129, 0.7)');
+      });
+    }
+
+    // Search Input
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      searchQuery = e.target.value;
+      renderCatalogGrid();
+    });
+
+    // Boot
+    async function boot() {
+      initWebGL();
+      try {
+        const res = await fetch('./catalog.json');
+        catalog = await res.json();
+        renderFilters();
+        selectProjectForWebGL('01', false);
+        renderCatalogGrid();
+      } catch (err) {
+        console.error('Failed to load catalog.json:', err);
+      }
+      checkTdBridge(false);
+      setInterval(() => checkTdBridge(false), 12000);
+    }
+
+    boot();
+  </script>
+</body>
+</html>
